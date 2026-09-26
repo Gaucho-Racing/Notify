@@ -1,0 +1,37 @@
+package config
+
+import "os"
+
+const Name = "notify"
+const Version = "0.1.0"
+
+var Env = os.Getenv("ENV")
+var Port = os.Getenv("PORT")
+
+var DatabaseHost = os.Getenv("DATABASE_HOST")
+var DatabasePort = os.Getenv("DATABASE_PORT")
+var DatabaseUser = os.Getenv("DATABASE_USER")
+var DatabasePassword = os.Getenv("DATABASE_PASSWORD")
+var DatabaseName = os.Getenv("DATABASE_NAME")
+
+var SentinelURL = os.Getenv("SENTINEL_URL")
+var SentinelClientID = os.Getenv("SENTINEL_CLIENT_ID")
+var SentinelClientSecret = os.Getenv("SENTINEL_CLIENT_SECRET")
+var SentinelRedirectURI = os.Getenv("SENTINEL_REDIRECT_URI")
+var SentinelSAToken = os.Getenv("SENTINEL_SA_TOKEN")
+
+var ResendAPIKey = os.Getenv("RESEND_API_KEY")
+var EmailFrom = os.Getenv("EMAIL_FROM")
+
+var DiscordBotToken = os.Getenv("DISCORD_BOT_TOKEN")
+
+var WorkerConcurrency = os.Getenv("WORKER_CONCURRENCY")
+var DeliveryMaxAttempts = os.Getenv("DELIVERY_MAX_ATTEMPTS")
+
+func IsProduction() bool {
+	return Env == "PROD"
+}
+
+func FormattedNameWithVersion() string {
+	return Name + " v" + Version
+}

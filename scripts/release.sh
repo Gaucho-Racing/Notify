@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    printf 'Usage: %s <version>\n\nExamples:\n  %s 0.1.0\n  %s\n' "$0" "$0" "$0"
+}
+
+while getopts ":h" option; do
+    case "$option" in
+        h) usage; exit 0 ;;
+        *) usage; exit 1 ;;
+    esac
+done
+shift $((OPTIND - 1))
+
+INPUT="${1:-}"
+
+for command in gh git; do
+    if ! command -v "$command" >/dev/null 2>&1; then
+        echo "Error: $command is required"
+        exit 1
+    fi
+done
+
+if ! gh auth status >/dev/null 2>&1; then
+    echo "Error: gh must be authenticated"
+    exit 1
+fi
+
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+if [[ "$BRANCH" != "main" ]]; then
+    echo "Error: must be on main branch (currently on $BRANCH)"
+    exit 1
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "Error: working tree must be clean"
+    exit 1
+fi
+
+git fetch origin main --tags --quiet
+LOCAL="$(git rev-parse HEAD)"
+REMOTE="$(git rev-parse origin/main)"
+if [[ "$LOCAL" != "$REMOTE" ]]; then
+    echo "Error: local main is not up to date with origin/main"
+    echo "  local:  $LOCAL"
+    echo "  remote: $REMOTE"
+    exit 1
+fi
+
+PREVIOUS="$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | sort -V | tail -n1)"
+
+if [[ -z "$INPUT" ]]; then
+    echo
+    if [[ -n "$PREVIOUS" ]]; then
+        echo "Current release: $PREVIOUS"
+    else
+        echo "Current release: (none)"
+    fi
+    echo
+    read -rp "Enter new version: " INPUT
+fi
+
+INPUT="${INPUT#v}"
+if [[ ! "$INPUT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Error: version must be a valid semver (e.g. 0.1.0)"
+    exit 1
+fi
+
+SEMVER="$INPUT"
+TAG="v$INPUT"
+IMAGES=("notify-server")
+
+if git tag -l "$TAG" | grep -q "^${TAG}$"; then
+    echo "Error: tag $TAG already exists"
+    exit 1
+fi
+
+if gh release view "$TAG" >/dev/null 2>&1; then
+    echo "Error: release $TAG already exists"
+    exit 1
+fi
+
+echo
+echo "=== Release Summary ==="
+echo "  Version: $TAG"
+echo "  Commit:  $(git rev-parse --short HEAD)"
+echo "  Branch:  main"
+echo
+echo "  File to update:"
+echo "    notify/config/config.go"
+echo
+echo "  Docker images that will be tagged:"
+for image in "${IMAGES[@]}"; do
+    echo "    ghcr.io/gaucho-racing/${image}:${SEMVER}"
+done
+echo
+read -rp "Proceed? (y/N) " CONFIRMATION
+if [[ "$CONFIRMATION" != "y" && "$CONFIRMATION" != "Y" ]]; then
+    echo "Aborted."
+    exit 0
+fi
+
+sed -i '' "s/const Version = \".*\"/const Version = \"${SEMVER}\"/" "$REPO_ROOT/notify/config/config.go"
+
+git add notify/config/config.go
+git commit --allow-empty -m "release: notify $TAG"
+git push origin main
+
+gh release create "$TAG" \
+    --target main \
+    --title "$TAG" \
+    --generate-notes
+
+echo
+echo "Done. $TAG released. Workflows will publish images and open the deployment PR shortly."

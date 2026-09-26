@@ -1,0 +1,61 @@
+services:
+  kerbecs:
+    container_name: notify-kerbecs
+    image: bk1031/kerbecs:latest
+    restart: always
+    ports:
+      - "127.0.0.1:10310:10310"
+    volumes:
+      - ./kerbecs.yaml:/etc/kerbecs/kerbecs.yaml:ro
+    environment:
+      KERBECS_CONFIG: /etc/kerbecs/kerbecs.yaml
+    depends_on:
+      - notify
+
+  notify:
+    container_name: notify-notify
+    build:
+      context: ./notify
+      dockerfile: Dockerfile.dev
+    restart: always
+    working_dir: /app
+    ports:
+      - "127.0.0.1:9999:9999"
+    volumes:
+      - ./notify:/app
+      - notify_gopath:/go
+    depends_on:
+      - db
+    environment:
+      ENV: DEV
+      PORT: 9999
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: postgres
+      DATABASE_PASSWORD: password
+      DATABASE_NAME: notify
+      SENTINEL_URL: ${SENTINEL_URL}
+      SENTINEL_CLIENT_ID: ${SENTINEL_CLIENT_ID}
+      SENTINEL_CLIENT_SECRET: ${SENTINEL_CLIENT_SECRET}
+      SENTINEL_REDIRECT_URI: ${SENTINEL_REDIRECT_URI}
+      SENTINEL_SA_TOKEN: ${SENTINEL_SA_TOKEN}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      EMAIL_FROM: ${EMAIL_FROM}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+
+  db:
+    container_name: notify-db
+    image: postgres:18-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: notify
+    ports:
+      - "127.0.0.1:5435:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+
+volumes:
+  notify_gopath:
+  pgdata:
