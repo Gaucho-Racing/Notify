@@ -1,0 +1,35 @@
+package model
+
+import "time"
+
+type MessageRecipients struct {
+	EntityIDs []string `json:"entity_ids"`
+	GroupIDs  []string `json:"group_ids"`
+}
+
+// Message is one send request as the calling application made it. Group
+// recipients are expanded into per-entity deliveries at send time, so
+// Recipients preserves what was asked for while RecipientCount records who it
+// resolved to.
+type Message struct {
+	ID             string            `json:"id" gorm:"primaryKey"`
+	ClientID       string            `json:"client_id" gorm:"index"`
+	SenderEntityID string            `json:"sender_entity_id" gorm:"index"`
+	SenderType     ActorType         `json:"sender_type"`
+	Subject        string            `json:"subject"`
+	Body           string            `json:"body"`
+	HTML           string            `json:"html,omitempty"`
+	ActionURL      string            `json:"action_url,omitempty"`
+	ActionLabel    string            `json:"action_label,omitempty"`
+	Category       string            `json:"category,omitempty" gorm:"index"`
+	Metadata       map[string]any    `json:"metadata" gorm:"serializer:json;type:jsonb"`
+	Channels       []Channel         `json:"channels" gorm:"serializer:json;type:jsonb"`
+	Recipients     MessageRecipients `json:"recipients" gorm:"serializer:json;type:jsonb"`
+	RecipientCount int               `json:"recipient_count"`
+	IdempotencyKey *string           `json:"idempotency_key,omitempty"`
+	CreatedAt      time.Time         `json:"created_at" gorm:"autoCreateTime;index"`
+}
+
+func (Message) TableName() string {
+	return "notify_message"
+}

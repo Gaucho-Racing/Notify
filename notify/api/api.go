@@ -1,6 +1,8 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -15,11 +17,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Run() {
-	api := InitializeRouter()
-	InitializeRoutes(api)
-	err := api.Run(":" + config.Port)
-	if err != nil {
+const shutdownTimeout = 15 * time.Second
+
+// Run serves until ctx is cancelled, then drains open requests so a send that
+// is mid-transaction during a deploy still gets its response.
+func Run(ctx context.Context) {
+	router := InitializeRouter()
+	InitializeRoutes(router)
+	server := &http.Server{Addr: ":" + config.Port, Handler: router}
+
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.SugarLogger.Errorf("Failed to shut down server cleanly: %v", err)
+		}
+	}()
+
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		logger.SugarLogger.Fatalf("Failed to start server: %v", err)
 	}
 }
@@ -59,6 +75,13 @@ func InitializeRoutes(router *gin.Engine) {
 	router.GET("/policies/:clientID", GetAppPolicy)
 	router.PUT("/policies/:clientID", UpsertAppPolicy)
 	router.DELETE("/policies/:clientID", DeleteAppPolicy)
+
+	router.POST("/messages", SendMessage)
+	router.GET("/messages", ListMessages)
+	router.GET("/messages/:messageID", GetMessage)
+
+	router.GET("/deliveries", ListDeliveries)
+	router.POST("/deliveries/:deliveryID/retry", RetryDelivery)
 }
 
 func AuthChecker() gin.HandlerFunc {

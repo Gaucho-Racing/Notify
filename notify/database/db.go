@@ -34,9 +34,23 @@ func Init() {
 	logger.SugarLogger.Infoln("Connected to database")
 	if err := db.AutoMigrate(
 		&model.AppPolicy{},
+		&model.Message{},
+		&model.Delivery{},
 	); err != nil {
 		logger.SugarLogger.Fatalf("failed to run database migrations: %v", err)
 		return
+	}
+	indexes := []string{
+		// Partial so the many messages sent without a key never collide.
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_message_idempotency ON notify_message (client_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_notify_delivery_queue ON notify_delivery (next_attempt_at) WHERE status = 'PENDING'`,
+		`CREATE INDEX IF NOT EXISTS idx_notify_delivery_stats ON notify_delivery (client_id, created_at, channel, status)`,
+	}
+	for _, statement := range indexes {
+		if err := db.Exec(statement).Error; err != nil {
+			logger.SugarLogger.Fatalf("failed to create index: %v", err)
+			return
+		}
 	}
 	logger.SugarLogger.Infoln("AutoMigration complete")
 	DB = db
