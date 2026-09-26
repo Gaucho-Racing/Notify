@@ -82,6 +82,9 @@ func InitializeRoutes(router *gin.Engine) {
 
 	router.GET("/deliveries", ListDeliveries)
 	router.POST("/deliveries/:deliveryID/retry", RetryDelivery)
+
+	router.GET("/stats", GetStats)
+	router.GET("/stats/activity", GetActivityStats)
 }
 
 func AuthChecker() gin.HandlerFunc {
