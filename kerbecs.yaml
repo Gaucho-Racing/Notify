@@ -33,6 +33,12 @@ upstreams:
     instances:
       - http://notify:9999
 
+  web:
+    name: notify-web
+    version: 0.1.0
+    instances:
+      - http://web:5173
+
 routes:
   - name: notify-api
     match:
@@ -42,3 +48,8 @@ routes:
       strip_prefix: /api
     envelope: passthrough
 
+  - name: notify-web
+    match:
+      path: /*
+    upstream: web
+    envelope: passthrough

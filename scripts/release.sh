@@ -72,7 +72,7 @@ fi
 
 SEMVER="$INPUT"
 TAG="v$INPUT"
-IMAGES=("notify-server")
+IMAGES=("notify-server" "notify-web")
 
 if git tag -l "$TAG" | grep -q "^${TAG}$"; then
     echo "Error: tag $TAG already exists"

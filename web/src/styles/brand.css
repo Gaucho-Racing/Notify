@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+  --color-gr-pink: #e105a3;
+  --color-gr-purple: #8412fc;
+  --color-discord-blurple: #7289da;
+
+  --font-sans: "Geist Variable", sans-serif;
+  --font-brand: "Inter Variable", sans-serif;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+@keyframes draw-stroke {
+  to {
+    stroke-dashoffset: 0;
+  }
+}

@@ -4,8 +4,8 @@ run-name: Check Notify image builds
 # Aggregates the per-image builds into one check, so branch protection has a
 # single required status to gate on instead of one per image.
 #
-# Triggers mirror notify.yml exactly — every branch and every tag.
-# If this workflow ran on a ref it skips, it would poll for runs that
+# Triggers mirror notify.yml and web.yml exactly — every branch and every tag.
+# If this workflow ran on a ref those two skip, it would poll for runs that
 # never start and fail at the timeout.
 #
 # Each image is waited on in turn rather than in parallel. They build
@@ -91,3 +91,4 @@ jobs:
           }
 
           wait_for_workflow "notify" "notify.yml"
+          wait_for_workflow "web" "web.yml"
