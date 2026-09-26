@@ -41,8 +41,6 @@ func Init() {
 		return
 	}
 	indexes := []string{
-		// Partial so the many messages sent without a key never collide.
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_message_idempotency ON notify_message (client_id, idempotency_key) WHERE idempotency_key IS NOT NULL`,
 		`CREATE INDEX IF NOT EXISTS idx_notify_delivery_queue ON notify_delivery (next_attempt_at) WHERE status = 'PENDING'`,
 		`CREATE INDEX IF NOT EXISTS idx_notify_delivery_stats ON notify_delivery (client_id, created_at, channel, status)`,
 	}

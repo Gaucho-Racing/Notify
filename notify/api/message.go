@@ -15,15 +15,14 @@ import (
 )
 
 const (
-	maxSubjectLength        = 200
-	maxBodyLength           = 10_000
-	maxHTMLBytes            = 100_000
-	maxCategoryLength       = 64
-	maxActionLabelLength    = 40
-	maxMetadataBytes        = 8_000
-	maxIdempotencyKeyLength = 256
-	defaultPageSize         = 50
-	maxPageSize             = 200
+	maxSubjectLength     = 200
+	maxBodyLength        = 10_000
+	maxHTMLBytes         = 100_000
+	maxCategoryLength    = 64
+	maxActionLabelLength = 40
+	maxMetadataBytes     = 8_000
+	defaultPageSize      = 50
+	maxPageSize          = 200
 )
 
 type sendMessageRequest struct {
@@ -58,7 +57,7 @@ func SendMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body: " + err.Error()})
 		return
 	}
-	sendReq, err := validateSendRequest(req, c.GetHeader("Idempotency-Key"))
+	sendReq, err := validateSendRequest(req)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -92,13 +91,11 @@ func SendMessage(c *gin.Context) {
 		dailyLimit = policy.DailyLimit
 	}
 
-	result, err := service.SendMessage(c.Request.Context(), sendReq, requestActor(c), dailyLimit)
+	message, err := service.SendMessage(c.Request.Context(), sendReq, requestActor(c), dailyLimit)
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrNoRecipients), errors.Is(err, service.ErrTooManyRecipients), errors.Is(err, service.ErrGroupNotFound):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		case errors.Is(err, service.ErrIdempotencyMismatch):
-			c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		case errors.Is(err, service.ErrDailyLimitExceeded):
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
 		default:
@@ -107,11 +104,7 @@ func SendMessage(c *gin.Context) {
 		return
 	}
 
-	status := http.StatusAccepted
-	if !result.Created {
-		status = http.StatusOK
-	}
-	c.JSON(status, result.Message)
+	c.JSON(http.StatusAccepted, message)
 }
 
 func ListMessages(c *gin.Context) {
@@ -250,7 +243,7 @@ func pageSize(c *gin.Context) (int, error) {
 	return limit, nil
 }
 
-func validateSendRequest(req sendMessageRequest, idempotencyKey string) (service.SendRequest, error) {
+func validateSendRequest(req sendMessageRequest) (service.SendRequest, error) {
 	subject := strings.TrimSpace(req.Subject)
 	body := strings.TrimSpace(req.Body)
 	switch {
@@ -268,8 +261,6 @@ func validateSendRequest(req sendMessageRequest, idempotencyKey string) (service
 		return service.SendRequest{}, fmt.Errorf("category must be at most %d characters", maxCategoryLength)
 	case len([]rune(req.ActionLabel)) > maxActionLabelLength:
 		return service.SendRequest{}, fmt.Errorf("action_label must be at most %d characters", maxActionLabelLength)
-	case len(idempotencyKey) > maxIdempotencyKeyLength:
-		return service.SendRequest{}, fmt.Errorf("Idempotency-Key must be at most %d characters", maxIdempotencyKeyLength)
 	case len(req.Recipients.EntityIDs) == 0 && len(req.Recipients.GroupIDs) == 0:
 		return service.SendRequest{}, errors.New("recipients.entity_ids or recipients.group_ids is required")
 	case len(req.Recipients.EntityIDs) > service.MaxRecipientsPerMessage:
@@ -303,15 +294,14 @@ func validateSendRequest(req sendMessageRequest, idempotencyKey string) (service
 	}
 
 	return service.SendRequest{
-		Recipients:     req.Recipients,
-		Channels:       channels,
-		Subject:        subject,
-		Body:           body,
-		HTML:           req.HTML,
-		ActionURL:      actionURL,
-		ActionLabel:    strings.TrimSpace(req.ActionLabel),
-		Category:       strings.TrimSpace(req.Category),
-		Metadata:       req.Metadata,
-		IdempotencyKey: strings.TrimSpace(idempotencyKey),
+		Recipients:  req.Recipients,
+		Channels:    channels,
+		Subject:     subject,
+		Body:        body,
+		HTML:        req.HTML,
+		ActionURL:   actionURL,
+		ActionLabel: strings.TrimSpace(req.ActionLabel),
+		Category:    strings.TrimSpace(req.Category),
+		Metadata:    req.Metadata,
 	}, nil
 }

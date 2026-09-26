@@ -18,56 +18,37 @@ import (
 const MaxRecipientsPerMessage = 1000
 
 var (
-	ErrNoRecipients        = errors.New("message resolves to no recipients")
-	ErrTooManyRecipients   = fmt.Errorf("message resolves to more than %d recipients", MaxRecipientsPerMessage)
-	ErrDailyLimitExceeded  = errors.New("application daily delivery limit exceeded")
-	ErrGroupNotFound       = errors.New("group not found in Sentinel")
-	ErrMessageNotFound     = errors.New("message not found")
-	ErrIdempotencyMismatch = errors.New("idempotency key was already used for a different message")
+	ErrNoRecipients       = errors.New("message resolves to no recipients")
+	ErrTooManyRecipients  = fmt.Errorf("message resolves to more than %d recipients", MaxRecipientsPerMessage)
+	ErrDailyLimitExceeded = errors.New("application daily delivery limit exceeded")
+	ErrGroupNotFound      = errors.New("group not found in Sentinel")
+	ErrMessageNotFound    = errors.New("message not found")
 )
 
 type SendRequest struct {
-	Recipients     model.MessageRecipients
-	Channels       []model.Channel
-	Subject        string
-	Body           string
-	HTML           string
-	ActionURL      string
-	ActionLabel    string
-	Category       string
-	Metadata       map[string]any
-	IdempotencyKey string
-}
-
-// SendResult reports whether the message was created by this call or is the
-// original of an idempotent replay.
-type SendResult struct {
-	Message model.Message
-	Created bool
+	Recipients  model.MessageRecipients
+	Channels    []model.Channel
+	Subject     string
+	Body        string
+	HTML        string
+	ActionURL   string
+	ActionLabel string
+	Category    string
+	Metadata    map[string]any
 }
 
 // SendMessage records a message and one PENDING delivery per recipient per
 // channel; the worker does the actual sending. dailyLimit of 0 is unlimited.
-func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit int) (SendResult, error) {
-	if req.IdempotencyKey != "" {
-		existing, err := findByIdempotencyKey(actor.ClientID, req.IdempotencyKey)
-		if err == nil {
-			return replay(existing, req)
-		}
-		if !errors.Is(err, ErrMessageNotFound) {
-			return SendResult{}, err
-		}
-	}
-
+func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit int) (model.Message, error) {
 	entityIDs, err := expandRecipients(ctx, req.Recipients)
 	if err != nil {
-		return SendResult{}, err
+		return model.Message{}, err
 	}
 	if len(entityIDs) == 0 {
-		return SendResult{}, ErrNoRecipients
+		return model.Message{}, ErrNoRecipients
 	}
 	if len(entityIDs) > MaxRecipientsPerMessage {
-		return SendResult{}, ErrTooManyRecipients
+		return model.Message{}, ErrTooManyRecipients
 	}
 
 	message := model.Message{
@@ -88,9 +69,6 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 	}
 	if message.Metadata == nil {
 		message.Metadata = map[string]any{}
-	}
-	if req.IdempotencyKey != "" {
-		message.IdempotencyKey = &req.IdempotencyKey
 	}
 
 	now := time.Now()
@@ -132,16 +110,9 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		return tx.CreateInBatches(&deliveries, 500).Error
 	})
 	if err != nil {
-		if errors.Is(err, gorm.ErrDuplicatedKey) && req.IdempotencyKey != "" {
-			existing, findErr := findByIdempotencyKey(actor.ClientID, req.IdempotencyKey)
-			if findErr != nil {
-				return SendResult{}, findErr
-			}
-			return replay(existing, req)
-		}
-		return SendResult{}, err
+		return model.Message{}, err
 	}
-	return SendResult{Message: message, Created: true}, nil
+	return message, nil
 }
 
 func GetMessage(id string) (model.Message, error) {
@@ -178,39 +149,6 @@ func ListMessages(filter MessageFilter) ([]model.Message, error) {
 		return nil, err
 	}
 	return messages, nil
-}
-
-func findByIdempotencyKey(clientID string, key string) (model.Message, error) {
-	var message model.Message
-	if err := database.DB.Where("client_id = ? AND idempotency_key = ?", clientID, key).First(&message).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return model.Message{}, ErrMessageNotFound
-		}
-		return model.Message{}, err
-	}
-	return message, nil
-}
-
-// replay returns the original message for a reused key, but refuses when the
-// request content differs: silently answering a different message with the
-// old one would hide a caller bug that drops notifications.
-func replay(existing model.Message, req SendRequest) (SendResult, error) {
-	if existing.Subject != req.Subject || existing.Body != req.Body || !sameChannels(existing.Channels, req.Channels) {
-		return SendResult{}, ErrIdempotencyMismatch
-	}
-	return SendResult{Message: existing, Created: false}, nil
-}
-
-func sameChannels(a []model.Channel, b []model.Channel) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func expandRecipients(ctx context.Context, recipients model.MessageRecipients) ([]string, error) {

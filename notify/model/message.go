@@ -26,7 +26,6 @@ type Message struct {
 	Channels       []Channel         `json:"channels" gorm:"serializer:json;type:jsonb"`
 	Recipients     MessageRecipients `json:"recipients" gorm:"serializer:json;type:jsonb"`
 	RecipientCount int               `json:"recipient_count"`
-	IdempotencyKey *string           `json:"idempotency_key,omitempty"`
 	CreatedAt      time.Time         `json:"created_at" gorm:"autoCreateTime;index"`
 }
 
