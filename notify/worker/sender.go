@@ -37,5 +37,6 @@ type retryAfterError interface {
 }
 
 var senders = map[model.Channel]Sender{
-	model.ChannelEmail: emailSender{},
+	model.ChannelEmail:   emailSender{},
+	model.ChannelDiscord: discordSender{},
 }
