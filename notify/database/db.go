@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/gaucho-racing/notify/notify/config"
+	"github.com/gaucho-racing/notify/notify/model"
 	"github.com/gaucho-racing/notify/notify/pkg/logger"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -31,7 +32,9 @@ func Init() {
 	}
 
 	logger.SugarLogger.Infoln("Connected to database")
-	if err := db.AutoMigrate(); err != nil {
+	if err := db.AutoMigrate(
+		&model.AppPolicy{},
+	); err != nil {
 		logger.SugarLogger.Fatalf("failed to run database migrations: %v", err)
 		return
 	}

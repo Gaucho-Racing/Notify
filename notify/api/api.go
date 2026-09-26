@@ -54,6 +54,11 @@ func InitializeRoutes(router *gin.Engine) {
 	router.GET("/applications", ListSentinelApplications)
 	router.POST("/applications/resolve", ResolveApplications)
 	router.POST("/identities/resolve", ResolveIdentities)
+
+	router.GET("/policies", ListAppPolicies)
+	router.GET("/policies/:clientID", GetAppPolicy)
+	router.PUT("/policies/:clientID", UpsertAppPolicy)
+	router.DELETE("/policies/:clientID", DeleteAppPolicy)
 }
 
 func AuthChecker() gin.HandlerFunc {
