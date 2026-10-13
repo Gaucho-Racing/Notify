@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -26,15 +27,16 @@ var (
 )
 
 type SendRequest struct {
-	Recipients  model.MessageRecipients
-	Channels    []model.Channel
-	Subject     string
-	Body        string
-	HTML        string
-	ActionURL   string
-	ActionLabel string
-	Category    string
-	Metadata    map[string]any
+	Recipients   model.MessageRecipients
+	Channels     []model.Channel
+	DiscordBotID string
+	Subject      string
+	Body         string
+	HTML         string
+	ActionURL    string
+	ActionLabel  string
+	Category     string
+	Metadata     map[string]any
 }
 
 // SendMessage records a message and one PENDING delivery per recipient per
@@ -51,6 +53,15 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		return model.Message{}, ErrTooManyRecipients
 	}
 
+	discordBotID := ""
+	if slices.Contains(req.Channels, model.ChannelDiscord) {
+		bot, err := ResolveDiscordBotForSend(req.DiscordBotID)
+		if err != nil {
+			return model.Message{}, err
+		}
+		discordBotID = bot.ID
+	}
+
 	message := model.Message{
 		ID:             ulid.Make().Prefixed("msg"),
 		ClientID:       actor.ClientID,
@@ -64,6 +75,7 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		Category:       req.Category,
 		Metadata:       req.Metadata,
 		Channels:       req.Channels,
+		DiscordBotID:   discordBotID,
 		Recipients:     req.Recipients,
 		RecipientCount: len(entityIDs),
 	}

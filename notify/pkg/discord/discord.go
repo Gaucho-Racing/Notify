@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	"github.com/gaucho-racing/notify/notify/config"
 )
 
 const baseURL = "https://discord.com/api/v10"
@@ -72,21 +70,43 @@ func (e Error) RetryAfterDuration() time.Duration {
 // SendDirectMessage opens (or reuses) the DM channel with a user and posts to
 // it. Both calls are plain REST, so Notify needs no gateway connection; the
 // bot only has to share a guild with the recipient.
-func SendDirectMessage(ctx context.Context, userID string, message Message) (string, error) {
+func SendDirectMessage(ctx context.Context, token string, userID string, message Message) (string, error) {
 	var channel struct {
 		ID string `json:"id"`
 	}
-	if err := call(ctx, http.MethodPost, "/users/@me/channels", map[string]string{"recipient_id": userID}, &channel); err != nil {
+	if err := call(ctx, token, http.MethodPost, "/users/@me/channels", map[string]string{"recipient_id": userID}, &channel); err != nil {
 		return "", err
 	}
 
 	var sent struct {
 		ID string `json:"id"`
 	}
-	if err := call(ctx, http.MethodPost, "/channels/"+url.PathEscape(channel.ID)+"/messages", message, &sent); err != nil {
+	if err := call(ctx, token, http.MethodPost, "/channels/"+url.PathEscape(channel.ID)+"/messages", message, &sent); err != nil {
 		return "", err
 	}
 	return sent.ID, nil
+}
+
+type User struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Avatar   string `json:"avatar"`
+	Bot      bool   `json:"bot"`
+}
+
+func (u User) AvatarURL() string {
+	if u.Avatar == "" {
+		return ""
+	}
+	return "https://cdn.discordapp.com/avatars/" + url.PathEscape(u.ID) + "/" + url.PathEscape(u.Avatar) + ".png"
+}
+
+// GetCurrentUser identifies the account a token belongs to, which doubles as
+// a check that the token is valid before Notify stores it.
+func GetCurrentUser(ctx context.Context, token string) (User, error) {
+	var user User
+	err := call(ctx, token, http.MethodGet, "/users/@me", nil, &user)
+	return user, err
 }
 
 func TruncateTitle(title string) string {
@@ -105,21 +125,27 @@ func truncate(value string, limit int) string {
 	return string(runes[:limit-1]) + "…"
 }
 
-func call(ctx context.Context, method string, path string, payload interface{}, out interface{}) error {
-	if strings.TrimSpace(config.DiscordBotToken) == "" {
-		return fmt.Errorf("DISCORD_BOT_TOKEN is not configured")
+func call(ctx context.Context, token string, method string, path string, payload interface{}, out interface{}) error {
+	if strings.TrimSpace(token) == "" {
+		return fmt.Errorf("discord bot token is empty")
 	}
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("encode discord request: %w", err)
+	var body io.Reader
+	if payload != nil {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("encode discord request: %w", err)
+		}
+		body = bytes.NewReader(encoded)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, body)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bot "+config.DiscordBotToken)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bot "+token)
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

@@ -76,3 +76,11 @@ api.interceptors.response.use(
     return api(original)
   },
 )
+
+export function apiErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof AxiosError) {
+    const message = (error.response?.data as { error?: unknown } | undefined)?.error
+    if (typeof message === "string" && message) return message
+  }
+  return fallback
+}

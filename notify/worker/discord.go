@@ -2,9 +2,11 @@ package worker
 
 import (
 	"context"
+	"errors"
 
 	"github.com/gaucho-racing/notify/notify/pkg/discord"
 	"github.com/gaucho-racing/notify/notify/pkg/sentinel"
+	"github.com/gaucho-racing/notify/notify/service"
 )
 
 const embedColor = 0x18181b
@@ -35,7 +37,33 @@ func (discordSender) Send(ctx context.Context, outbound Outbound, destination st
 	if outbound.ApplicationName != "" {
 		embed.Footer = &discord.EmbedFooter{Text: "Sent by " + outbound.ApplicationName + " via Notify"}
 	}
-	return discord.SendDirectMessage(ctx, destination, discord.Message{Embeds: []discord.Embed{embed}})
+	token, err := botToken(outbound.Message.DiscordBotID)
+	if err != nil {
+		return "", err
+	}
+	return discord.SendDirectMessage(ctx, token, destination, discord.Message{Embeds: []discord.Embed{embed}})
+}
+
+// botToken fails permanently when the message's bot is gone or disabled:
+// retrying cannot help until an admin intervenes, and a manual retry re-reads
+// the bot anyway.
+func botToken(botID string) (string, error) {
+	if botID == "" {
+		return "", botUnavailableError{errors.New("message has no discord bot assigned")}
+	}
+	token, err := service.DiscordBotToken(botID)
+	if errors.Is(err, service.ErrDiscordBotNotFound) || errors.Is(err, service.ErrDiscordBotDisabled) {
+		return "", botUnavailableError{err}
+	}
+	return token, err
+}
+
+type botUnavailableError struct {
+	error
+}
+
+func (botUnavailableError) Permanent() bool {
+	return true
 }
 
 func discordBody(outbound Outbound) string {

@@ -76,6 +76,12 @@ func InitializeRoutes(router *gin.Engine) {
 	router.PUT("/policies/:clientID", UpsertAppPolicy)
 	router.DELETE("/policies/:clientID", DeleteAppPolicy)
 
+	router.GET("/discord-bots", ListDiscordBots)
+	router.POST("/discord-bots", CreateDiscordBot)
+	router.GET("/discord-bots/:botID", GetDiscordBot)
+	router.PATCH("/discord-bots/:botID", UpdateDiscordBot)
+	router.DELETE("/discord-bots/:botID", DeleteDiscordBot)
+
 	router.POST("/messages", SendMessage)
 	router.GET("/messages", ListMessages)
 	router.GET("/messages/:messageID", GetMessage)

@@ -1,12 +1,14 @@
-import { Bell, LayoutDashboard, Settings } from "lucide-react"
+import { Bell, Bot, LayoutDashboard, Settings } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
+import { useAuth } from "@/lib/auth"
 import { envLabel, useNotifyStatus } from "@/lib/status"
 import { cn } from "@/lib/utils"
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/discord-bots", label: "Discord bots", icon: Bot, adminOnly: true },
   { to: "/settings", label: "Settings", icon: Settings },
 ]
 
@@ -17,6 +19,7 @@ function isActive(currentPath: string, target: string) {
 export function AppSidebar() {
   const { pathname } = useLocation()
   const { env } = useNotifyStatus()
+  const { isAdmin } = useAuth()
   const environment = envLabel(env)
 
   return (
@@ -28,7 +31,7 @@ export function AppSidebar() {
         <div className="min-w-0 text-base font-semibold leading-none">Notify</div>
       </div>
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {navItems.map((item) => {
+        {navItems.filter((item) => isAdmin || !item.adminOnly).map((item) => {
           const active = isActive(pathname, item.to)
           return (
             <Link

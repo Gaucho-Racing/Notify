@@ -12,18 +12,21 @@ type MessageRecipients struct {
 // Recipients preserves what was asked for while RecipientCount records who it
 // resolved to.
 type Message struct {
-	ID             string            `json:"id" gorm:"primaryKey"`
-	ClientID       string            `json:"client_id" gorm:"index"`
-	SenderEntityID string            `json:"sender_entity_id" gorm:"index"`
-	SenderType     ActorType         `json:"sender_type"`
-	Subject        string            `json:"subject"`
-	Body           string            `json:"body"`
-	HTML           string            `json:"html,omitempty"`
-	ActionURL      string            `json:"action_url,omitempty"`
-	ActionLabel    string            `json:"action_label,omitempty"`
-	Category       string            `json:"category,omitempty" gorm:"index"`
-	Metadata       map[string]any    `json:"metadata" gorm:"serializer:json;type:jsonb"`
-	Channels       []Channel         `json:"channels" gorm:"serializer:json;type:jsonb"`
+	ID             string         `json:"id" gorm:"primaryKey"`
+	ClientID       string         `json:"client_id" gorm:"index"`
+	SenderEntityID string         `json:"sender_entity_id" gorm:"index"`
+	SenderType     ActorType      `json:"sender_type"`
+	Subject        string         `json:"subject"`
+	Body           string         `json:"body"`
+	HTML           string         `json:"html,omitempty"`
+	ActionURL      string         `json:"action_url,omitempty"`
+	ActionLabel    string         `json:"action_label,omitempty"`
+	Category       string         `json:"category,omitempty" gorm:"index"`
+	Metadata       map[string]any `json:"metadata" gorm:"serializer:json;type:jsonb"`
+	Channels       []Channel      `json:"channels" gorm:"serializer:json;type:jsonb"`
+	// DiscordBotID is resolved at send time, falling back to the default bot,
+	// so retries go out through the same bot even if the default changes.
+	DiscordBotID   string            `json:"discord_bot_id,omitempty" gorm:"index"`
 	Recipients     MessageRecipients `json:"recipients" gorm:"serializer:json;type:jsonb"`
 	RecipientCount int               `json:"recipient_count"`
 	CreatedAt      time.Time         `json:"created_at" gorm:"autoCreateTime;index"`

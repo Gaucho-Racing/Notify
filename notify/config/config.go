@@ -23,7 +23,7 @@ var SentinelSAToken = os.Getenv("SENTINEL_SA_TOKEN")
 var ResendAPIKey = os.Getenv("RESEND_API_KEY")
 var EmailFrom = os.Getenv("EMAIL_FROM")
 
-var DiscordBotToken = os.Getenv("DISCORD_BOT_TOKEN")
+var EncryptionKey = os.Getenv("ENCRYPTION_KEY")
 
 var WorkerConcurrency = os.Getenv("WORKER_CONCURRENCY")
 var DeliveryMaxAttempts = os.Getenv("DELIVERY_MAX_ATTEMPTS")

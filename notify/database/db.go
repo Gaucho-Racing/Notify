@@ -36,12 +36,14 @@ func Init() {
 		&model.AppPolicy{},
 		&model.Message{},
 		&model.Delivery{},
+		&model.DiscordBot{},
 	); err != nil {
 		logger.SugarLogger.Fatalf("failed to run database migrations: %v", err)
 		return
 	}
 	indexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_notify_delivery_queue ON notify_delivery (next_attempt_at) WHERE status = 'PENDING'`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_discord_bot_default ON notify_discord_bot (is_default) WHERE is_default`,
 		`CREATE INDEX IF NOT EXISTS idx_notify_delivery_stats ON notify_delivery (client_id, created_at, channel, status)`,
 	}
 	for _, statement := range indexes {

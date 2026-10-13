@@ -42,7 +42,7 @@ services:
       SENTINEL_SA_TOKEN: ${SENTINEL_SA_TOKEN}
       RESEND_API_KEY: ${RESEND_API_KEY}
       EMAIL_FROM: ${EMAIL_FROM}
-      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
 
   web:
     container_name: notify-web

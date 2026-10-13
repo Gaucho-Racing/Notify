@@ -4,10 +4,15 @@ import (
 	"strconv"
 
 	"github.com/gaucho-racing/notify/notify/pkg/logger"
+	"github.com/gaucho-racing/notify/notify/pkg/secretbox"
 )
 
 var WorkerConcurrencyLimit int
 var DeliveryMaxAttemptsLimit int
+
+// Secrets stays nil without ENCRYPTION_KEY; every Seal and Open on it then
+// returns secretbox.ErrNotConfigured.
+var Secrets *secretbox.Box
 
 func Verify() {
 	if Env == "" {
@@ -50,8 +55,14 @@ func Verify() {
 	if ResendAPIKey == "" || EmailFrom == "" {
 		logger.SugarLogger.Warnf("RESEND_API_KEY / EMAIL_FROM are not set, email deliveries will fail")
 	}
-	if DiscordBotToken == "" {
-		logger.SugarLogger.Warnf("DISCORD_BOT_TOKEN is not set, discord deliveries will fail")
+	if EncryptionKey == "" {
+		logger.SugarLogger.Warnf("ENCRYPTION_KEY is not set, discord bots cannot be configured and discord deliveries will fail")
+	} else {
+		box, err := secretbox.New(EncryptionKey)
+		if err != nil {
+			logger.SugarLogger.Fatalf("ENCRYPTION_KEY is invalid: %v", err)
+		}
+		Secrets = box
 	}
 	WorkerConcurrencyLimit = positiveInt("WORKER_CONCURRENCY", &WorkerConcurrency, "8")
 	DeliveryMaxAttemptsLimit = positiveInt("DELIVERY_MAX_ATTEMPTS", &DeliveryMaxAttempts, "6")

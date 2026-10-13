@@ -1,4 +1,4 @@
-import { Bell, LayoutDashboard, LogOut, Menu, Settings } from "lucide-react"
+import { Bell, Bot, LayoutDashboard, LogOut, Menu, Settings } from "lucide-react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -17,11 +17,13 @@ import { cn } from "@/lib/utils"
 
 const mobileItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/discord-bots", label: "Discord bots", icon: Bot, adminOnly: true },
   { to: "/settings", label: "Settings", icon: Settings },
 ]
 
 function sectionTitle(pathname: string) {
   if (pathname.startsWith("/settings")) return "Settings"
+  if (pathname.startsWith("/discord-bots")) return "Discord bots"
   if (pathname.startsWith("/dashboard")) return "Dashboard"
   return "Notify"
 }
@@ -80,6 +82,7 @@ function HeaderUserMenu() {
 export function AppHeader() {
   const { pathname } = useLocation()
   const section = sectionTitle(pathname)
+  const { isAdmin } = useAuth()
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/60 bg-background/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/75 lg:px-6">
@@ -93,7 +96,7 @@ export function AppHeader() {
         <DropdownMenuContent align="start" className="w-52">
           <DropdownMenuLabel>Notify</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {mobileItems.map((item) => (
+          {mobileItems.filter((item) => isAdmin || !item.adminOnly).map((item) => (
             <DropdownMenuItem key={item.to} asChild>
               <Link
                 to={item.to}
