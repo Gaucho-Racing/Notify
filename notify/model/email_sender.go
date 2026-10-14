@@ -1,9 +1,6 @@
 package model
 
-import (
-	"net/mail"
-	"time"
-)
+import "time"
 
 // EmailSender is a From identity Notify can send email as, through one
 // Resend account. FromAddress must be on a domain verified in that account;
@@ -29,6 +26,11 @@ func (EmailSender) TableName() string {
 	return "notify_email_sender"
 }
 
+// From renders the two shapes Resend accepts, "addr" or "Name <addr>". Go's
+// mail.Address would emit "<addr>" for an empty name, which Resend rejects.
 func (s EmailSender) From() string {
-	return (&mail.Address{Name: s.FromName, Address: s.FromAddress}).String()
+	if s.FromName == "" {
+		return s.FromAddress
+	}
+	return s.FromName + " <" + s.FromAddress + ">"
 }

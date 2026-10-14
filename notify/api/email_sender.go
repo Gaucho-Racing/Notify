@@ -165,6 +165,9 @@ func bindEmailSenderRequest(c *gin.Context) (service.EmailSenderInput, bool) {
 		if len([]rune(fromName)) > maxEmailFromNameLength || strings.ContainsAny(fromName, "\r\n") {
 			return fail(fmt.Sprintf("from_name must be at most %d characters on one line", maxEmailFromNameLength))
 		}
+		if strings.ContainsAny(fromName, `<>"@,;\`) {
+			return fail(`from_name cannot contain < > " @ , ; or \`)
+		}
 		input.FromName = &fromName
 	}
 	if req.FromAddress != nil {
