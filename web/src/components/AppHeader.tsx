@@ -1,4 +1,4 @@
-import { Bell, Bot, KeyRound, LayoutDashboard, LogOut, Mail, Menu, Settings } from "lucide-react"
+import { Bell, Bot, KeyRound, LayoutDashboard, LogOut, Mail, Menu, MessageSquare, Phone, Settings } from "lucide-react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -19,6 +19,8 @@ const mobileItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/email-senders", label: "Email senders", icon: Mail, adminOnly: true },
   { to: "/resend-accounts", label: "Resend accounts", icon: KeyRound, adminOnly: true },
+  { to: "/sms-senders", label: "SMS senders", icon: MessageSquare, adminOnly: true },
+  { to: "/twilio-accounts", label: "Twilio accounts", icon: Phone, adminOnly: true },
   { to: "/discord-bots", label: "Discord bots", icon: Bot, adminOnly: true },
   { to: "/settings", label: "Settings", icon: Settings },
 ]
@@ -28,6 +30,8 @@ function sectionTitle(pathname: string) {
   if (pathname.startsWith("/discord-bots")) return "Discord bots"
   if (pathname.startsWith("/email-senders")) return "Email senders"
   if (pathname.startsWith("/resend-accounts")) return "Resend accounts"
+  if (pathname.startsWith("/sms-senders")) return "SMS senders"
+  if (pathname.startsWith("/twilio-accounts")) return "Twilio accounts"
   if (pathname.startsWith("/dashboard")) return "Dashboard"
   return "Notify"
 }

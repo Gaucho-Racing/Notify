@@ -9,6 +9,8 @@ import ResendAccountsPage from "@/pages/ResendAccountsPage"
 import LoginPage from "@/pages/LoginPage"
 import NotFoundPage from "@/pages/NotFoundPage"
 import SettingsPage from "@/pages/SettingsPage"
+import SMSSendersPage from "@/pages/SMSSendersPage"
+import TwilioAccountsPage from "@/pages/TwilioAccountsPage"
 
 export const router = createBrowserRouter([
   {
@@ -21,6 +23,8 @@ export const router = createBrowserRouter([
           { path: "/dashboard", element: <DashboardPage /> },
           { path: "/email-senders", element: <EmailSendersPage /> },
           { path: "/resend-accounts", element: <ResendAccountsPage /> },
+          { path: "/sms-senders", element: <SMSSendersPage /> },
+          { path: "/twilio-accounts", element: <TwilioAccountsPage /> },
           { path: "/discord-bots", element: <DiscordBotsPage /> },
           { path: "/settings", element: <SettingsPage /> },
         ],

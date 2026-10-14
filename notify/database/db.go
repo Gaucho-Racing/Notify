@@ -39,6 +39,8 @@ func Init() {
 		&model.DiscordBot{},
 		&model.EmailSender{},
 		&model.ResendAccount{},
+		&model.TwilioAccount{},
+		&model.SMSSender{},
 	); err != nil {
 		logger.SugarLogger.Fatalf("failed to run database migrations: %v", err)
 		return
@@ -47,6 +49,7 @@ func Init() {
 		`CREATE INDEX IF NOT EXISTS idx_notify_delivery_queue ON notify_delivery (next_attempt_at) WHERE status = 'PENDING'`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_discord_bot_default ON notify_discord_bot (is_default) WHERE is_default`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_email_sender_default ON notify_email_sender (is_default) WHERE is_default`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_notify_sms_sender_default ON notify_sms_sender (is_default) WHERE is_default`,
 		`CREATE INDEX IF NOT EXISTS idx_notify_delivery_stats ON notify_delivery (client_id, created_at, channel, status)`,
 	}
 	for _, statement := range indexes {

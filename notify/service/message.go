@@ -31,6 +31,7 @@ type SendRequest struct {
 	Channels      []model.Channel
 	DiscordBotID  string
 	EmailSenderID string
+	SMSSenderID   string
 	Subject       string
 	Body          string
 	HTML          string
@@ -70,6 +71,14 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		}
 		emailSenderID = sender.ID
 	}
+	smsSenderID := ""
+	if slices.Contains(req.Channels, model.ChannelSMS) {
+		sender, err := ResolveSMSSenderForSend(req.SMSSenderID)
+		if err != nil {
+			return model.Message{}, err
+		}
+		smsSenderID = sender.ID
+	}
 
 	message := model.Message{
 		ID:             ulid.Make().Prefixed("msg"),
@@ -86,6 +95,7 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		Channels:       req.Channels,
 		DiscordBotID:   discordBotID,
 		EmailSenderID:  emailSenderID,
+		SMSSenderID:    smsSenderID,
 		Recipients:     req.Recipients,
 		RecipientCount: len(entityIDs),
 	}

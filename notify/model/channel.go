@@ -5,9 +5,10 @@ type Channel string
 const (
 	ChannelEmail   Channel = "EMAIL"
 	ChannelDiscord Channel = "DISCORD"
+	ChannelSMS     Channel = "SMS"
 )
 
-var SupportedChannels = []Channel{ChannelEmail, ChannelDiscord}
+var SupportedChannels = []Channel{ChannelEmail, ChannelDiscord, ChannelSMS}
 
 func (c Channel) Valid() bool {
 	for _, supported := range SupportedChannels {

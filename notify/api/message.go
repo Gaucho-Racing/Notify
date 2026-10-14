@@ -31,6 +31,7 @@ type sendMessageRequest struct {
 	Channels      []model.Channel         `json:"channels"`
 	DiscordBotID  string                  `json:"discord_bot_id"`
 	EmailSenderID string                  `json:"email_sender_id"`
+	SMSSenderID   string                  `json:"sms_sender_id"`
 	Subject       string                  `json:"subject"`
 	Body          string                  `json:"body"`
 	HTML          string                  `json:"html"`
@@ -100,7 +101,9 @@ func SendMessage(c *gin.Context) {
 		case errors.Is(err, service.ErrNoRecipients), errors.Is(err, service.ErrTooManyRecipients), errors.Is(err, service.ErrGroupNotFound),
 			errors.Is(err, service.ErrDiscordBotNotFound), errors.Is(err, service.ErrDiscordBotDisabled), errors.Is(err, service.ErrNoDefaultDiscordBot),
 			errors.Is(err, service.ErrEmailSenderNotFound), errors.Is(err, service.ErrEmailSenderDisabled), errors.Is(err, service.ErrNoDefaultEmailSender),
-			errors.Is(err, service.ErrResendAccountNotFound), errors.Is(err, service.ErrResendAccountDisabled):
+			errors.Is(err, service.ErrResendAccountNotFound), errors.Is(err, service.ErrResendAccountDisabled),
+			errors.Is(err, service.ErrSMSSenderNotFound), errors.Is(err, service.ErrSMSSenderDisabled), errors.Is(err, service.ErrNoDefaultSMSSender),
+			errors.Is(err, service.ErrTwilioAccountNotFound), errors.Is(err, service.ErrTwilioAccountDisabled):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, service.ErrDailyLimitExceeded):
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
@@ -287,6 +290,10 @@ func validateSendRequest(req sendMessageRequest) (service.SendRequest, error) {
 	if emailSenderID != "" && !slices.Contains(channels, model.ChannelEmail) {
 		return service.SendRequest{}, errors.New("email_sender_id requires EMAIL in channels")
 	}
+	smsSenderID := strings.TrimSpace(req.SMSSenderID)
+	if smsSenderID != "" && !slices.Contains(channels, model.ChannelSMS) {
+		return service.SendRequest{}, errors.New("sms_sender_id requires SMS in channels")
+	}
 	if req.Recipients.EntityIDs == nil {
 		req.Recipients.EntityIDs = []string{}
 	}
@@ -312,6 +319,7 @@ func validateSendRequest(req sendMessageRequest) (service.SendRequest, error) {
 		Channels:      channels,
 		DiscordBotID:  discordBotID,
 		EmailSenderID: emailSenderID,
+		SMSSenderID:   smsSenderID,
 		Subject:       subject,
 		Body:          body,
 		HTML:          req.HTML,

@@ -8,7 +8,7 @@ export type SentinelApplication = {
   icon_url: string
 }
 
-export type Channel = "EMAIL" | "DISCORD"
+export type Channel = "EMAIL" | "DISCORD" | "SMS"
 
 export type StatusCounts = {
   pending: number
@@ -185,4 +185,99 @@ export async function updateResendAccount(id: string, input: ResendAccountInput)
 
 export async function deleteResendAccount(id: string) {
   await api.delete(`/resend-accounts/${encodeURIComponent(id)}`)
+}
+
+export const TWILIO_ACCOUNTS_KEY = ["twilioAccounts"]
+
+export type TwilioAccount = {
+  id: string
+  name: string
+  description: string
+  account_sid: string
+  key_sid: string
+  secret_hint: string
+  enabled: boolean
+  sender_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type TwilioAccountInput = Partial<{
+  name: string
+  description: string
+  account_sid: string
+  key_sid: string
+  secret: string
+  enabled: boolean
+}>
+
+export type TwilioSenderOptions = {
+  phone_numbers: { phone_number: string; friendly_name: string; sms: boolean }[]
+  messaging_services: { sid: string; friendly_name: string }[]
+}
+
+export async function listTwilioAccounts() {
+  const response = await api.get<TwilioAccount[]>("/twilio-accounts")
+  return response.data
+}
+
+export async function listTwilioSenderOptions(id: string) {
+  const response = await api.get<TwilioSenderOptions>(`/twilio-accounts/${encodeURIComponent(id)}/senders`)
+  return response.data
+}
+
+export async function createTwilioAccount(input: TwilioAccountInput) {
+  const response = await api.post<TwilioAccount>("/twilio-accounts", input)
+  return response.data
+}
+
+export async function updateTwilioAccount(id: string, input: TwilioAccountInput) {
+  const response = await api.patch<TwilioAccount>(`/twilio-accounts/${encodeURIComponent(id)}`, input)
+  return response.data
+}
+
+export async function deleteTwilioAccount(id: string) {
+  await api.delete(`/twilio-accounts/${encodeURIComponent(id)}`)
+}
+
+export type SMSSender = {
+  id: string
+  name: string
+  description: string
+  twilio_account_id: string
+  from_number: string
+  messaging_service_sid: string
+  is_default: boolean
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type SMSSenderInput = Partial<{
+  name: string
+  description: string
+  twilio_account_id: string
+  from_number: string
+  messaging_service_sid: string
+  is_default: boolean
+  enabled: boolean
+}>
+
+export async function listSMSSenders() {
+  const response = await api.get<SMSSender[]>("/sms-senders")
+  return response.data
+}
+
+export async function createSMSSender(input: SMSSenderInput) {
+  const response = await api.post<SMSSender>("/sms-senders", input)
+  return response.data
+}
+
+export async function updateSMSSender(id: string, input: SMSSenderInput) {
+  const response = await api.patch<SMSSender>(`/sms-senders/${encodeURIComponent(id)}`, input)
+  return response.data
+}
+
+export async function deleteSMSSender(id: string) {
+  await api.delete(`/sms-senders/${encodeURIComponent(id)}`)
 }

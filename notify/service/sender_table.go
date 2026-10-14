@@ -2,7 +2,7 @@ package service
 
 import "gorm.io/gorm"
 
-// Discord bots and email senders share the same shape: unique
+// Discord bots, email senders, and SMS senders share the same shape: unique
 // case-insensitive names and at most one default. These helpers enforce that
 // for either table inside a write transaction.
 

@@ -1,4 +1,4 @@
-import { Bell, Bot, KeyRound, LayoutDashboard, Mail, Settings } from "lucide-react"
+import { Bell, Bot, KeyRound, LayoutDashboard, Mail, MessageSquare, Phone, Settings } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,8 @@ const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/email-senders", label: "Email senders", icon: Mail, adminOnly: true },
   { to: "/resend-accounts", label: "Resend accounts", icon: KeyRound, adminOnly: true },
+  { to: "/sms-senders", label: "SMS senders", icon: MessageSquare, adminOnly: true },
+  { to: "/twilio-accounts", label: "Twilio accounts", icon: Phone, adminOnly: true },
   { to: "/discord-bots", label: "Discord bots", icon: Bot, adminOnly: true },
   { to: "/settings", label: "Settings", icon: Settings },
 ]

@@ -95,6 +95,19 @@ func InitializeRoutes(router *gin.Engine) {
 	router.PATCH("/email-senders/:senderID", UpdateEmailSender)
 	router.DELETE("/email-senders/:senderID", DeleteEmailSender)
 
+	router.GET("/twilio-accounts", ListTwilioAccounts)
+	router.POST("/twilio-accounts", CreateTwilioAccount)
+	router.GET("/twilio-accounts/:accountID", GetTwilioAccount)
+	router.GET("/twilio-accounts/:accountID/senders", ListTwilioSenderOptions)
+	router.PATCH("/twilio-accounts/:accountID", UpdateTwilioAccount)
+	router.DELETE("/twilio-accounts/:accountID", DeleteTwilioAccount)
+
+	router.GET("/sms-senders", ListSMSSenders)
+	router.POST("/sms-senders", CreateSMSSender)
+	router.GET("/sms-senders/:senderID", GetSMSSender)
+	router.PATCH("/sms-senders/:senderID", UpdateSMSSender)
+	router.DELETE("/sms-senders/:senderID", DeleteSMSSender)
+
 	router.POST("/messages", SendMessage)
 	router.GET("/messages", ListMessages)
 	router.GET("/messages/:messageID", GetMessage)

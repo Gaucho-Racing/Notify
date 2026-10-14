@@ -39,6 +39,7 @@ type retryAfterError interface {
 var senders = map[model.Channel]Sender{
 	model.ChannelEmail:   emailSender{},
 	model.ChannelDiscord: discordSender{},
+	model.ChannelSMS:     smsSender{},
 }
 
 // unavailableError marks a delivery whose bot or sender is gone or disabled.
