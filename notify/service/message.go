@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -28,11 +27,9 @@ var (
 )
 
 type SendRequest struct {
+	Channel       model.Channel
 	Recipients    model.MessageRecipients
-	Channels      []model.Channel
-	DiscordBotID  string
-	EmailSenderID string
-	SMSSenderID   string
+	SenderID      string
 	Subject       string
 	Body          string
 	EmailHTML     string
@@ -41,43 +38,21 @@ type SendRequest struct {
 	Metadata      map[string]any
 }
 
-// SendMessage records a message and one PENDING delivery per recipient per
-// channel; the worker does the actual sending. dailyLimit of 0 is unlimited.
+// SendMessage records a message and one PENDING delivery per person, plus one
+// per Discord channel; the worker does the actual sending. dailyLimit of 0 is
+// unlimited.
 func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit int) (model.Message, error) {
 	entityIDs, err := expandRecipients(ctx, req.Recipients)
 	if err != nil {
 		return model.Message{}, err
 	}
-	if len(entityIDs) == 0 {
+	channelIDs := uniqueNonEmpty(req.Recipients.DiscordChannelIDs)
+	total := len(entityIDs) + len(channelIDs)
+	if total == 0 {
 		return model.Message{}, ErrNoRecipients
 	}
-	if len(entityIDs) > MaxRecipientsPerMessage {
+	if total > MaxRecipientsPerMessage {
 		return model.Message{}, ErrTooManyRecipients
-	}
-
-	discordBotID := ""
-	if slices.Contains(req.Channels, model.ChannelDiscord) {
-		bot, err := ResolveDiscordBotForSend(req.DiscordBotID)
-		if err != nil {
-			return model.Message{}, err
-		}
-		discordBotID = bot.ID
-	}
-	emailSenderID := ""
-	if slices.Contains(req.Channels, model.ChannelEmail) {
-		sender, err := ResolveEmailSenderForSend(req.EmailSenderID)
-		if err != nil {
-			return model.Message{}, err
-		}
-		emailSenderID = sender.ID
-	}
-	smsSenderID := ""
-	if slices.Contains(req.Channels, model.ChannelSMS) {
-		sender, err := ResolveSMSSenderForSend(req.SMSSenderID)
-		if err != nil {
-			return model.Message{}, err
-		}
-		smsSenderID = sender.ID
 	}
 
 	message := model.Message{
@@ -85,37 +60,56 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		ClientID:       actor.ClientID,
 		SenderEntityID: actor.EntityID,
 		SenderType:     actor.Type,
+		Channel:        req.Channel,
 		Subject:        req.Subject,
 		Body:           req.Body,
 		EmailHTML:      req.EmailHTML,
 		DiscordEmbeds:  req.DiscordEmbeds,
 		Category:       req.Category,
 		Metadata:       req.Metadata,
-		Channels:       req.Channels,
-		DiscordBotID:   discordBotID,
-		EmailSenderID:  emailSenderID,
-		SMSSenderID:    smsSenderID,
 		Recipients:     req.Recipients,
-		RecipientCount: len(entityIDs),
+		RecipientCount: total,
 	}
 	if message.Metadata == nil {
 		message.Metadata = map[string]any{}
 	}
+	switch req.Channel {
+	case model.ChannelEmail:
+		sender, err := ResolveEmailSenderForSend(req.SenderID)
+		if err != nil {
+			return model.Message{}, err
+		}
+		message.EmailSenderID = sender.ID
+	case model.ChannelSMS:
+		sender, err := ResolveSMSSenderForSend(req.SenderID)
+		if err != nil {
+			return model.Message{}, err
+		}
+		message.SMSSenderID = sender.ID
+	case model.ChannelDiscord:
+		bot, err := ResolveDiscordBotForSend(req.SenderID)
+		if err != nil {
+			return model.Message{}, err
+		}
+		message.DiscordBotID = bot.ID
+	}
 
 	now := time.Now()
-	deliveries := make([]model.Delivery, 0, len(entityIDs)*len(req.Channels))
+	deliveries := make([]model.Delivery, 0, total)
+	pending := func(delivery model.Delivery) model.Delivery {
+		delivery.ID = ulid.Make().Prefixed("dlv")
+		delivery.MessageID = message.ID
+		delivery.ClientID = actor.ClientID
+		delivery.Channel = req.Channel
+		delivery.Status = model.DeliveryStatusPending
+		delivery.NextAttemptAt = now
+		return delivery
+	}
 	for _, entityID := range entityIDs {
-		for _, channel := range req.Channels {
-			deliveries = append(deliveries, model.Delivery{
-				ID:            ulid.Make().Prefixed("dlv"),
-				MessageID:     message.ID,
-				ClientID:      actor.ClientID,
-				EntityID:      entityID,
-				Channel:       channel,
-				Status:        model.DeliveryStatusPending,
-				NextAttemptAt: now,
-			})
-		}
+		deliveries = append(deliveries, pending(model.Delivery{EntityID: entityID}))
+	}
+	for _, channelID := range channelIDs {
+		deliveries = append(deliveries, pending(model.Delivery{DiscordChannelID: channelID}))
 	}
 
 	err = database.DB.Transaction(func(tx *gorm.DB) error {
@@ -180,6 +174,20 @@ func ListMessages(filter MessageFilter) ([]model.Message, error) {
 		return nil, err
 	}
 	return messages, nil
+}
+
+func uniqueNonEmpty(values []string) []string {
+	seen := map[string]struct{}{}
+	unique := []string{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if _, exists := seen[value]; value == "" || exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		unique = append(unique, value)
+	}
+	return unique
 }
 
 func expandRecipients(ctx context.Context, recipients model.MessageRecipients) ([]string, error) {

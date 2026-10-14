@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
+	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -17,6 +17,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var discordSnowflake = regexp.MustCompile(`^[0-9]{17,20}$`)
+
 const (
 	maxSubjectLength  = 200
 	maxBodyLength     = 10_000
@@ -27,33 +29,34 @@ const (
 	maxPageSize       = 200
 )
 
+// sendMessageRequest sends on exactly one channel, and only that channel's
+// content block may be set.
 type sendMessageRequest struct {
+	Channel    model.Channel           `json:"channel"`
 	Recipients model.MessageRecipients `json:"recipients"`
-	Channels   []model.Channel         `json:"channels"`
-	Subject    string                  `json:"subject"`
-	Body       string                  `json:"body"`
 	Category   string                  `json:"category"`
 	Metadata   map[string]any          `json:"metadata"`
-	Email      *emailOptions           `json:"email"`
-	SMS        *smsOptions             `json:"sms"`
-	Discord    *discordOptions         `json:"discord"`
+	Email      *emailContent           `json:"email"`
+	SMS        *smsContent             `json:"sms"`
+	Discord    *discordContent         `json:"discord"`
 }
 
-// Each channel block picks that channel's sender and, for email and Discord,
-// an optional rich version. Without one, every channel sends Body as plain
-// text.
-type emailOptions struct {
+type emailContent struct {
 	SenderID string `json:"sender_id"`
+	Subject  string `json:"subject"`
+	Body     string `json:"body"`
 	HTML     string `json:"html"`
 }
 
-type smsOptions struct {
+type smsContent struct {
 	SenderID string `json:"sender_id"`
+	Body     string `json:"body"`
 }
 
-type discordOptions struct {
-	BotID  string          `json:"bot_id"`
-	Embeds []discord.Embed `json:"embeds"`
+type discordContent struct {
+	BotID   string          `json:"bot_id"`
+	Content string          `json:"content"`
+	Embeds  []discord.Embed `json:"embeds"`
 }
 
 type messageDetail struct {
@@ -99,11 +102,9 @@ func SendMessage(c *gin.Context) {
 			c.JSON(http.StatusForbidden, gin.H{"error": "this application's Notify policy is disabled"})
 			return
 		}
-		for _, channel := range sendReq.Channels {
-			if !policy.AllowsChannel(channel) {
-				c.JSON(http.StatusForbidden, gin.H{"error": "this application is not allowed to send on " + string(channel)})
-				return
-			}
+		if !policy.AllowsChannel(sendReq.Channel) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "this application is not allowed to send on " + string(sendReq.Channel)})
+			return
 		}
 		if len(sendReq.Recipients.GroupIDs) > 0 && !policy.CanTargetGroups {
 			c.JSON(http.StatusForbidden, gin.H{"error": "this application is not allowed to send to groups"})
@@ -270,95 +271,115 @@ func pageSize(c *gin.Context) (int, error) {
 }
 
 func validateSendRequest(req sendMessageRequest) (service.SendRequest, error) {
-	subject := strings.TrimSpace(req.Subject)
-	body := strings.TrimSpace(req.Body)
+	channel := model.Channel(strings.ToUpper(strings.TrimSpace(string(req.Channel))))
+	if !channel.Valid() {
+		return service.SendRequest{}, errors.New("channel must be EMAIL, SMS, or DISCORD")
+	}
+	blocks := map[model.Channel]bool{model.ChannelEmail: req.Email != nil, model.ChannelSMS: req.SMS != nil, model.ChannelDiscord: req.Discord != nil}
+	for blockChannel, present := range blocks {
+		if present && blockChannel != channel {
+			return service.SendRequest{}, fmt.Errorf("%s content is not allowed when channel is %s", strings.ToLower(string(blockChannel)), channel)
+		}
+	}
+	if !blocks[channel] {
+		return service.SendRequest{}, fmt.Errorf("%s content is required", strings.ToLower(string(channel)))
+	}
+
+	recipients := req.Recipients
 	switch {
-	case len([]rune(subject)) > maxSubjectLength:
-		return service.SendRequest{}, fmt.Errorf("subject must be at most %d characters", maxSubjectLength)
-	case body == "":
-		return service.SendRequest{}, errors.New("body is required")
-	case len([]rune(body)) > maxBodyLength:
-		return service.SendRequest{}, fmt.Errorf("body must be at most %d characters", maxBodyLength)
+	case len(recipients.EntityIDs) == 0 && len(recipients.GroupIDs) == 0 && len(recipients.DiscordChannelIDs) == 0:
+		return service.SendRequest{}, errors.New("recipients needs entity_ids, group_ids, or discord_channel_ids")
+	case len(recipients.EntityIDs)+len(recipients.DiscordChannelIDs) > service.MaxRecipientsPerMessage:
+		return service.SendRequest{}, fmt.Errorf("at most %d recipients may be sent to at once", service.MaxRecipientsPerMessage)
+	case len(recipients.DiscordChannelIDs) > 0 && channel != model.ChannelDiscord:
+		return service.SendRequest{}, errors.New("recipients.discord_channel_ids requires channel DISCORD")
 	case len([]rune(req.Category)) > maxCategoryLength:
 		return service.SendRequest{}, fmt.Errorf("category must be at most %d characters", maxCategoryLength)
-	case len(req.Recipients.EntityIDs) == 0 && len(req.Recipients.GroupIDs) == 0:
-		return service.SendRequest{}, errors.New("recipients.entity_ids or recipients.group_ids is required")
-	case len(req.Recipients.EntityIDs) > service.MaxRecipientsPerMessage:
-		return service.SendRequest{}, fmt.Errorf("at most %d entity IDs may be sent to at once", service.MaxRecipientsPerMessage)
-	case len(req.Channels) == 0:
-		return service.SendRequest{}, errors.New("channels is required")
 	}
-
-	channels, err := normalizeChannels(req.Channels)
-	if err != nil {
-		return service.SendRequest{}, err
-	}
-	sendReq := service.SendRequest{
-		Recipients: req.Recipients,
-		Channels:   channels,
-		Subject:    subject,
-		Body:       body,
-		Category:   strings.TrimSpace(req.Category),
-		Metadata:   req.Metadata,
-	}
-	if sendReq.Recipients.EntityIDs == nil {
-		sendReq.Recipients.EntityIDs = []string{}
-	}
-	if sendReq.Recipients.GroupIDs == nil {
-		sendReq.Recipients.GroupIDs = []string{}
-	}
-	requireChannel := func(block string, channel model.Channel) error {
-		if !slices.Contains(channels, channel) {
-			return fmt.Errorf("%s requires %s in channels", block, channel)
-		}
-		return nil
-	}
-
-	if slices.Contains(channels, model.ChannelEmail) && subject == "" {
-		return service.SendRequest{}, errors.New("subject is required when sending EMAIL")
-	}
-	if req.Email != nil {
-		if err := requireChannel("email", model.ChannelEmail); err != nil {
-			return service.SendRequest{}, err
-		}
-		if len(req.Email.HTML) > maxHTMLBytes {
-			return service.SendRequest{}, fmt.Errorf("email.html must be at most %d bytes", maxHTMLBytes)
-		}
-		sendReq.EmailSenderID = strings.TrimSpace(req.Email.SenderID)
-		sendReq.EmailHTML = strings.TrimSpace(req.Email.HTML)
-	}
-
-	if slices.Contains(channels, model.ChannelSMS) {
-		if length := twilio.BodyLength(body); length > twilio.MaxBodyLength {
-			return service.SendRequest{}, fmt.Errorf("body is %d characters, over SMS's %d-character limit", length, twilio.MaxBodyLength)
+	for _, id := range recipients.DiscordChannelIDs {
+		if !discordSnowflake.MatchString(strings.TrimSpace(id)) {
+			return service.SendRequest{}, fmt.Errorf("discord channel ID %q is not a valid Discord ID", id)
 		}
 	}
-	if req.SMS != nil {
-		if err := requireChannel("sms", model.ChannelSMS); err != nil {
-			return service.SendRequest{}, err
-		}
-		sendReq.SMSSenderID = strings.TrimSpace(req.SMS.SenderID)
+	if recipients.EntityIDs == nil {
+		recipients.EntityIDs = []string{}
 	}
-
-	if req.Discord != nil {
-		if err := requireChannel("discord", model.ChannelDiscord); err != nil {
-			return service.SendRequest{}, err
-		}
-		if err := discord.ValidateEmbeds(req.Discord.Embeds); err != nil {
-			return service.SendRequest{}, fmt.Errorf("discord.%w", err)
-		}
-		sendReq.DiscordBotID = strings.TrimSpace(req.Discord.BotID)
-		sendReq.DiscordEmbeds = req.Discord.Embeds
+	if recipients.GroupIDs == nil {
+		recipients.GroupIDs = []string{}
 	}
-	if slices.Contains(channels, model.ChannelDiscord) && len(sendReq.DiscordEmbeds) == 0 && utf8.RuneCountInString(body) > discord.MaxContentLength {
-		return service.SendRequest{}, fmt.Errorf("body is over Discord's %d-character message limit; shorten it or send discord.embeds", discord.MaxContentLength)
-	}
-
 	if req.Metadata != nil {
 		encoded, err := json.Marshal(req.Metadata)
 		if err != nil || len(encoded) > maxMetadataBytes {
 			return service.SendRequest{}, fmt.Errorf("metadata must encode to at most %d bytes of JSON", maxMetadataBytes)
 		}
 	}
-	return sendReq, nil
+
+	sendReq := service.SendRequest{
+		Channel:    channel,
+		Recipients: recipients,
+		Category:   strings.TrimSpace(req.Category),
+		Metadata:   req.Metadata,
+	}
+	var err error
+	switch channel {
+	case model.ChannelEmail:
+		err = applyEmailContent(&sendReq, *req.Email)
+	case model.ChannelSMS:
+		err = applySMSContent(&sendReq, *req.SMS)
+	case model.ChannelDiscord:
+		err = applyDiscordContent(&sendReq, *req.Discord)
+	}
+	return sendReq, err
+}
+
+func applyEmailContent(sendReq *service.SendRequest, email emailContent) error {
+	subject := strings.TrimSpace(email.Subject)
+	body := strings.TrimSpace(email.Body)
+	switch {
+	case subject == "":
+		return errors.New("email.subject is required")
+	case len([]rune(subject)) > maxSubjectLength:
+		return fmt.Errorf("email.subject must be at most %d characters", maxSubjectLength)
+	case body == "":
+		return errors.New("email.body is required; it is the plain-text version even when html is set")
+	case len([]rune(body)) > maxBodyLength:
+		return fmt.Errorf("email.body must be at most %d characters", maxBodyLength)
+	case len(email.HTML) > maxHTMLBytes:
+		return fmt.Errorf("email.html must be at most %d bytes", maxHTMLBytes)
+	}
+	sendReq.SenderID = strings.TrimSpace(email.SenderID)
+	sendReq.Subject = subject
+	sendReq.Body = body
+	sendReq.EmailHTML = strings.TrimSpace(email.HTML)
+	return nil
+}
+
+func applySMSContent(sendReq *service.SendRequest, sms smsContent) error {
+	body := strings.TrimSpace(sms.Body)
+	if body == "" {
+		return errors.New("sms.body is required")
+	}
+	if length := twilio.BodyLength(body); length > twilio.MaxBodyLength {
+		return fmt.Errorf("sms.body is %d characters, over SMS's %d-character limit", length, twilio.MaxBodyLength)
+	}
+	sendReq.SenderID = strings.TrimSpace(sms.SenderID)
+	sendReq.Body = body
+	return nil
+}
+
+func applyDiscordContent(sendReq *service.SendRequest, content discordContent) error {
+	text := strings.TrimSpace(content.Content)
+	if text == "" && len(content.Embeds) == 0 {
+		return errors.New("discord needs content, embeds, or both")
+	}
+	if utf8.RuneCountInString(text) > discord.MaxContentLength {
+		return fmt.Errorf("discord.content must be at most %d characters", discord.MaxContentLength)
+	}
+	if err := discord.ValidateEmbeds(content.Embeds); err != nil {
+		return fmt.Errorf("discord.%w", err)
+	}
+	sendReq.SenderID = strings.TrimSpace(content.BotID)
+	sendReq.Body = text
+	sendReq.DiscordEmbeds = content.Embeds
+	return nil
 }

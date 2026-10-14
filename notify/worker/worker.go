@@ -10,6 +10,7 @@ import (
 	"github.com/gaucho-racing/notify/notify/config"
 	"github.com/gaucho-racing/notify/notify/model"
 	"github.com/gaucho-racing/notify/notify/pkg/logger"
+	"github.com/gaucho-racing/notify/notify/pkg/sentinel"
 	"github.com/gaucho-racing/notify/notify/service"
 )
 
@@ -140,31 +141,38 @@ func process(delivery model.Delivery, message model.Message) {
 		return
 	}
 
-	contact, err := service.GetContact(ctx, delivery.EntityID)
-	if err != nil {
-		if errors.Is(err, service.ErrRecipientNotFound) {
-			finish(delivery, service.DeliveryOutcome{Status: model.DeliveryStatusSkipped, Provider: sender.Provider(), LastError: err.Error()})
+	var contact sentinel.Contact
+	destination := delivery.DiscordChannelID
+	masked := "#" + destination
+	if delivery.DiscordChannelID == "" {
+		var err error
+		contact, err = service.GetContact(ctx, delivery.EntityID)
+		if err != nil {
+			if errors.Is(err, service.ErrRecipientNotFound) {
+				finish(delivery, service.DeliveryOutcome{Status: model.DeliveryStatusSkipped, Provider: sender.Provider(), LastError: err.Error()})
+				return
+			}
+			finish(delivery, retryOutcome(delivery, err, sender.Provider(), ""))
 			return
 		}
-		finish(delivery, retryOutcome(delivery, err, sender.Provider(), ""))
-		return
+		var ok bool
+		destination, ok = sender.Destination(contact)
+		if !ok {
+			finish(delivery, service.DeliveryOutcome{
+				Status:    model.DeliveryStatusSkipped,
+				Provider:  sender.Provider(),
+				LastError: "recipient has no " + string(delivery.Channel) + " address on file",
+			})
+			return
+		}
+		masked = sender.MaskDestination(destination)
 	}
-
-	destination, ok := sender.Destination(contact)
-	if !ok {
-		finish(delivery, service.DeliveryOutcome{
-			Status:    model.DeliveryStatusSkipped,
-			Provider:  sender.Provider(),
-			LastError: "recipient has no " + string(delivery.Channel) + " address on file",
-		})
-		return
-	}
-	masked := sender.MaskDestination(destination)
 
 	providerMessageID, err := sender.Send(ctx, Outbound{
 		DeliveryID: delivery.ID,
 		Message:    message,
 		Contact:    contact,
+		ToChannel:  delivery.DiscordChannelID != "",
 	}, destination)
 	if err != nil {
 		var permanent permanentError

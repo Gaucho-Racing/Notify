@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { Copy, FileUp, Search, Send, UserRound, Users, X } from "lucide-react"
+import { Copy, FileUp, Hash, Megaphone, Search, Send, UserRound, Users, X } from "lucide-react"
 import { useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from "react"
 import { toast } from "sonner"
 
@@ -17,6 +17,7 @@ import { useAuth } from "@/lib/auth"
 import { useIdentityDirectory } from "@/lib/directory"
 import {
   getMessage,
+  listDiscordBotChannels,
   listDiscordBots,
   listEmailSenders,
   listGroups,
@@ -26,6 +27,7 @@ import {
   type Channel,
   type DeliveryStatus,
   type DiscordEmbed,
+  type DiscordGuild,
   type SendMessageInput,
 } from "@/lib/notify"
 import { cn } from "@/lib/utils"
@@ -53,10 +55,11 @@ const STATUS_SIGNAL: Record<DeliveryStatus, "live" | "down" | "warn" | "idle"> =
 
 export default function PlaygroundPage() {
   const { isAdmin, isLoading: authLoading, session } = useAuth()
+  const [channel, setChannel] = useState<Channel>("EMAIL")
+  const [senders, setSenders] = useState<Record<Channel, string>>({ EMAIL: DEFAULT_SENDER, SMS: DEFAULT_SENDER, DISCORD: DEFAULT_SENDER })
   const [entityIDs, setEntityIDs] = useState<string[]>([])
   const [groupIDs, setGroupIDs] = useState<string[]>([])
-  const [channels, setChannels] = useState<Channel[]>(["EMAIL"])
-  const [senders, setSenders] = useState<Record<Channel, string>>({ EMAIL: DEFAULT_SENDER, SMS: DEFAULT_SENDER, DISCORD: DEFAULT_SENDER })
+  const [discordChannelIDs, setDiscordChannelIDs] = useState<string[]>([])
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [category, setCategory] = useState("playground")
@@ -97,32 +100,47 @@ export default function PlaygroundPage() {
   }
   const selectedBotID = senders.DISCORD === DEFAULT_SENDER ? discordBots.data?.find((bot) => bot.is_default)?.id : senders.DISCORD
   const selectedBot = discordBots.data?.find((bot) => bot.id === selectedBotID)
-
-  const has = (channel: Channel) => channels.includes(channel)
-  const trimmedBody = body.trim()
+  const botChannels = useQuery({
+    queryKey: ["discordBotChannels", selectedBotID],
+    queryFn: () => listDiscordBotChannels(selectedBotID ?? ""),
+    enabled: isAdmin && channel === "DISCORD" && !!selectedBotID,
+    staleTime: 60 * 1000,
+  })
+  const channelNames = useMemo(() => {
+    const names = new Map<string, string>()
+    for (const guild of botChannels.data ?? []) {
+      for (const guildChannel of guild.channels) names.set(guildChannel.id, guildChannel.name)
+    }
+    return names
+  }, [botChannels.data])
   const richEmbed = useMemo(() => embedFromDraft(embed), [embed])
 
   const payload = useMemo<SendMessageInput>(() => {
-    const ordered = CHANNEL_ORDER.filter((channel) => channels.includes(channel))
-    const chosen = (channel: Channel) => (senders[channel] !== DEFAULT_SENDER ? senders[channel] : undefined)
+    const senderID = senders[channel] !== DEFAULT_SENDER ? senders[channel] : undefined
     const input: SendMessageInput = {
+      channel,
       recipients: { entity_ids: entityIDs, group_ids: groupIDs },
-      channels: ordered,
-      subject: subject.trim() || undefined,
-      body: body.trim(),
       category: category.trim() || undefined,
     }
-    if (ordered.includes("EMAIL")) {
-      const html = emailFormat === "html" ? emailHTML.trim() : ""
-      if (chosen("EMAIL") || html) input.email = { sender_id: chosen("EMAIL"), html: html || undefined }
-    }
-    if (ordered.includes("SMS") && chosen("SMS")) input.sms = { sender_id: chosen("SMS") }
-    if (ordered.includes("DISCORD")) {
-      const embeds = discordFormat === "rich" && richEmbed ? [richEmbed] : undefined
-      if (chosen("DISCORD") || embeds) input.discord = { bot_id: chosen("DISCORD"), embeds }
+    if (channel === "EMAIL") {
+      input.email = {
+        sender_id: senderID,
+        subject: subject.trim(),
+        body: body.trim(),
+        html: emailFormat === "html" ? emailHTML.trim() || undefined : undefined,
+      }
+    } else if (channel === "SMS") {
+      input.sms = { sender_id: senderID, body: body.trim() }
+    } else {
+      input.recipients.discord_channel_ids = discordChannelIDs
+      input.discord = {
+        bot_id: senderID,
+        content: body.trim() || undefined,
+        embeds: discordFormat === "rich" && richEmbed ? [richEmbed] : undefined,
+      }
     }
     return input
-  }, [entityIDs, groupIDs, channels, senders, subject, body, category, emailFormat, emailHTML, discordFormat, richEmbed])
+  }, [channel, senders, entityIDs, groupIDs, discordChannelIDs, subject, body, category, emailFormat, emailHTML, discordFormat, richEmbed])
 
   const send = useMutation({
     mutationFn: () => sendMessage(payload),
@@ -142,19 +160,21 @@ export default function PlaygroundPage() {
     )
   }
 
+  const trimmedBody = body.trim()
   const smsLength = trimmedBody.length
   const discordLength = [...trimmedBody].length
   const htmlBytes = new TextEncoder().encode(emailHTML).length
+  const recipientCount = entityIDs.length + groupIDs.length + (channel === "DISCORD" ? discordChannelIDs.length : 0)
   const problems = [
-    entityIDs.length + groupIDs.length === 0 && "Add at least one recipient.",
-    channels.length === 0 && "Pick at least one channel.",
-    trimmedBody === "" && "Write a body.",
-    has("EMAIL") && subject.trim() === "" && "Email needs a subject.",
-    has("EMAIL") && emailFormat === "html" && emailHTML.trim() === "" && "Paste or load the email HTML.",
-    has("EMAIL") && emailFormat === "html" && htmlBytes > EMAIL_HTML_MAX_BYTES && "Email HTML is over 100 KB.",
-    has("SMS") && smsLength > SMS_MAX_LENGTH && `Body is over SMS's ${SMS_MAX_LENGTH}-character limit.`,
-    has("DISCORD") && discordFormat === "plain" && discordLength > DISCORD_MAX_CONTENT && `Body is over Discord's ${DISCORD_MAX_CONTENT}-character limit; use rich.`,
-    has("DISCORD") && discordFormat === "rich" && !richEmbed && "Give the Discord embed a title or description.",
+    recipientCount === 0 && (channel === "DISCORD" ? "Pick a channel or person to message." : "Add at least one recipient."),
+    channel === "EMAIL" && subject.trim() === "" && "Email needs a subject.",
+    channel !== "DISCORD" && trimmedBody === "" && "Write a message.",
+    channel === "EMAIL" && emailFormat === "html" && emailHTML.trim() === "" && "Paste, drop, or load the email HTML.",
+    channel === "EMAIL" && emailFormat === "html" && htmlBytes > EMAIL_HTML_MAX_BYTES && "Email HTML is over 100 KB.",
+    channel === "SMS" && smsLength > SMS_MAX_LENGTH && `Message is over SMS's ${SMS_MAX_LENGTH}-character limit.`,
+    channel === "DISCORD" && discordLength > DISCORD_MAX_CONTENT && `Message is over Discord's ${DISCORD_MAX_CONTENT}-character limit.`,
+    channel === "DISCORD" && discordFormat === "plain" && trimmedBody === "" && "Write a message.",
+    channel === "DISCORD" && discordFormat === "rich" && !richEmbed && "Give the embed a title or description.",
   ].filter((problem): problem is string => typeof problem === "string")
   const canSend = problems.length === 0 && !send.isPending
 
@@ -163,25 +183,10 @@ export default function PlaygroundPage() {
     if (canSend) send.mutate()
   }
 
-  function toggleChannel(channel: Channel) {
-    setChannels((current) => (current.includes(channel) ? current.filter((value) => value !== channel) : [...current, channel]))
+  function changeBot(value: string) {
+    setSenders((current) => ({ ...current, DISCORD: value }))
+    setDiscordChannelIDs([])
   }
-
-  function changeDiscordFormat(format: "plain" | "rich") {
-    setDiscordFormat(format)
-    if (format === "rich" && !embed.title && !embed.description) {
-      setEmbed((current) => ({ ...current, title: subject.trim(), description: body.trim() }))
-    }
-  }
-
-  const senderSelect = (channel: Channel, label: string) => (
-    <SenderSelect
-      label={label}
-      value={senders[channel]}
-      options={senderOptions[channel]}
-      onChange={(value) => setSenders((current) => ({ ...current, [channel]: value }))}
-    />
-  )
 
   return (
     <PageContainer>
@@ -193,99 +198,128 @@ export default function PlaygroundPage() {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)]">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <Panel label="01 · Recipients">
-            <RecipientPicker
-              users={users.data ?? []}
-              usersError={users.error}
-              selected={entityIDs}
-              onChange={setEntityIDs}
-              selfEntityID={session?.entity_id}
-            />
-            <div className="mt-4 space-y-2">
-              <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Users className="size-3.5" />
-                Groups
-              </Label>
-              <div className="flex flex-wrap gap-1.5">
-                {(groups.data ?? []).map((group) => {
-                  const active = groupIDs.includes(group.id)
-                  return (
-                    <button
-                      key={group.id}
-                      type="button"
-                      onClick={() =>
-                        setGroupIDs((current) => (active ? current.filter((id) => id !== group.id) : [...current, group.id]))
-                      }
-                      className={cn(
-                        "rounded-sm border px-2 py-1 text-xs transition-colors",
-                        active ? "border-primary/50 bg-accent text-foreground" : "border-border text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {group.name}
-                      <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{group.member_count}</span>
-                    </button>
-                  )
-                })}
-                {groups.error && <p className="text-xs text-destructive">{apiErrorMessage(groups.error, "Failed to load groups.")}</p>}
+          <Panel label="01 · Channel">
+            <div className="grid gap-2 sm:grid-cols-3">
+              {CHANNEL_ORDER.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setChannel(option)}
+                  className={cn(
+                    "flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition-colors",
+                    channel === option ? "border-primary/50 bg-accent" : "border-border hover:bg-muted/50",
+                  )}
+                >
+                  <ChannelTag channel={option} />
+                  <span className={cn("size-3 rounded-full border", channel === option ? "border-primary bg-primary" : "border-muted-foreground/40")} />
+                </button>
+              ))}
+            </div>
+            <div className="mt-4">
+              <SenderSelect
+                label={channel === "DISCORD" ? "Bot" : "Sender"}
+                value={senders[channel]}
+                options={senderOptions[channel]}
+                onChange={(value) => (channel === "DISCORD" ? changeBot(value) : setSenders((current) => ({ ...current, [channel]: value })))}
+              />
+            </div>
+          </Panel>
+
+          <Panel label="02 · Recipients">
+            <div className="space-y-5">
+              {channel === "DISCORD" && (
+                <DiscordChannelPicker
+                  guilds={botChannels.data ?? []}
+                  loading={botChannels.isLoading}
+                  error={botChannels.error}
+                  hasBot={!!selectedBotID}
+                  selected={discordChannelIDs}
+                  onChange={setDiscordChannelIDs}
+                />
+              )}
+              <div className="space-y-4">
+                {channel === "DISCORD" && <Eyebrow>Direct messages</Eyebrow>}
+                <RecipientPicker
+                  users={users.data ?? []}
+                  usersError={users.error}
+                  selected={entityIDs}
+                  onChange={setEntityIDs}
+                  selfEntityID={session?.entity_id}
+                />
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Users className="size-3.5" />
+                    Groups
+                  </Label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(groups.data ?? []).map((group) => {
+                      const active = groupIDs.includes(group.id)
+                      return (
+                        <button
+                          key={group.id}
+                          type="button"
+                          onClick={() =>
+                            setGroupIDs((current) => (active ? current.filter((id) => id !== group.id) : [...current, group.id]))
+                          }
+                          className={cn(
+                            "rounded-sm border px-2 py-1 text-xs transition-colors",
+                            active ? "border-primary/50 bg-accent text-foreground" : "border-border text-muted-foreground hover:text-foreground",
+                          )}
+                        >
+                          {group.name}
+                          <span className="ml-1.5 font-mono text-[10px] text-muted-foreground">{group.member_count}</span>
+                        </button>
+                      )
+                    })}
+                    {groups.error && <p className="text-xs text-destructive">{apiErrorMessage(groups.error, "Failed to load groups.")}</p>}
+                  </div>
+                </div>
               </div>
             </div>
           </Panel>
 
-          <Panel label="02 · Message">
+          <Panel label="03 · Message">
             <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="pg-subject" className="text-xs text-muted-foreground">
-                  Subject <span className="font-mono text-[10px]">· email only</span>
-                </Label>
-                <Input id="pg-subject" value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={200} placeholder="Track day moved to Saturday" />
-              </div>
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="pg-body" className="text-xs text-muted-foreground">Body</Label>
-                  <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{discordLength.toLocaleString()} chars</span>
+              {channel === "EMAIL" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="pg-subject" className="text-xs text-muted-foreground">Subject</Label>
+                  <Input id="pg-subject" value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={200} placeholder="Track day moved to Saturday" />
                 </div>
+              )}
+              {channel === "DISCORD" && (
+                <div className="flex justify-end">
+                  <Segmented
+                    value={discordFormat}
+                    options={[["plain", "Plain"], ["rich", "Rich"]]}
+                    onChange={(value) => setDiscordFormat(value as "plain" | "rich")}
+                  />
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="pg-body" className="text-xs text-muted-foreground">
+                  {channel === "EMAIL" ? "Body (plain text)" : channel === "DISCORD" && discordFormat === "rich" ? "Message above the embed (optional)" : "Message"}
+                </Label>
                 <Textarea
                   id="pg-body"
                   value={body}
                   onChange={(event) => setBody(event.target.value)}
                   maxLength={10000}
-                  rows={6}
-                  placeholder="Sent as-is: the email text, the SMS, and the Discord message."
+                  rows={channel === "SMS" ? 4 : 6}
+                  placeholder={
+                    channel === "DISCORD"
+                      ? "Role and user mentions ping (<@&role-id>, <@user-id>). @everyone and @here never do."
+                      : channel === "EMAIL"
+                        ? "Sent as the plain-text email, and as the fallback when HTML is set."
+                        : "Gaucho Racing: …"
+                  }
                 />
+                {channel === "SMS" && <Meter label="Length" value={smsLength} max={SMS_MAX_LENGTH} />}
+                {channel === "DISCORD" && <Meter label="Length" value={discordLength} max={DISCORD_MAX_CONTENT} />}
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="pg-category" className="text-xs text-muted-foreground">Category</Label>
-                <Input id="pg-category" value={category} onChange={(event) => setCategory(event.target.value)} maxLength={64} className="font-mono" />
-              </div>
-            </div>
-          </Panel>
-
-          <Panel label="03 · Channels">
-            <div className="grid gap-2 sm:grid-cols-3">
-              {CHANNEL_ORDER.map((channel) => {
-                const active = has(channel)
-                return (
-                  <button
-                    key={channel}
-                    type="button"
-                    onClick={() => toggleChannel(channel)}
-                    className={cn(
-                      "flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition-colors",
-                      active ? "border-primary/50 bg-accent" : "border-border hover:bg-muted/50",
-                    )}
-                  >
-                    <ChannelTag channel={channel} />
-                    <span className={cn("size-3 rounded-[2px] border", active ? "border-primary bg-primary" : "border-muted-foreground/40")} />
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {has("EMAIL") && (
-                <ChannelOptions channel="EMAIL">
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                    {senderSelect("EMAIL", "Sender")}
+              {channel === "EMAIL" && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs text-muted-foreground">Format</Label>
                     <Segmented
                       value={emailFormat}
                       options={[["plain", "Plain"], ["html", "HTML"]]}
@@ -293,31 +327,18 @@ export default function PlaygroundPage() {
                     />
                   </div>
                   {emailFormat === "html" && <HTMLInput value={emailHTML} bytes={htmlBytes} onChange={setEmailHTML} />}
-                </ChannelOptions>
+                </div>
               )}
-              {has("SMS") && (
-                <ChannelOptions channel="SMS">
-                  {senderSelect("SMS", "Sender")}
-                  <Meter label="Body" value={smsLength} max={SMS_MAX_LENGTH} />
-                </ChannelOptions>
+              {channel === "DISCORD" && discordFormat === "rich" && (
+                <>
+                  <p className="text-xs text-muted-foreground">Mentions only ping from the message above, not from inside the embed.</p>
+                  <EmbedBuilder embed={embed} onChange={setEmbed} />
+                </>
               )}
-              {has("DISCORD") && (
-                <ChannelOptions channel="DISCORD">
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-                    {senderSelect("DISCORD", "Bot")}
-                    <Segmented
-                      value={discordFormat}
-                      options={[["plain", "Plain"], ["rich", "Rich"]]}
-                      onChange={(value) => changeDiscordFormat(value as "plain" | "rich")}
-                    />
-                  </div>
-                  {discordFormat === "plain" ? (
-                    <Meter label="Body" value={discordLength} max={DISCORD_MAX_CONTENT} />
-                  ) : (
-                    <EmbedBuilder embed={embed} onChange={setEmbed} />
-                  )}
-                </ChannelOptions>
-              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="pg-category" className="text-xs text-muted-foreground">Category</Label>
+                <Input id="pg-category" value={category} onChange={(event) => setCategory(event.target.value)} maxLength={64} className="font-mono" />
+              </div>
             </div>
           </Panel>
 
@@ -334,14 +355,15 @@ export default function PlaygroundPage() {
 
         <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
           {messageID ? (
-            <TransmissionLog messageID={messageID} onClear={() => setMessageID(null)} />
+            <TransmissionLog messageID={messageID} channelNames={channelNames} onClear={() => setMessageID(null)} />
           ) : (
             <Preview
-              channels={CHANNEL_ORDER.filter(has)}
+              channel={channel}
               subject={subject}
               body={body}
               emailHTML={emailFormat === "html" ? emailHTML : ""}
               discordEmbed={discordFormat === "rich" ? richEmbed : null}
+              discordChannel={discordChannelIDs.length ? channelNames.get(discordChannelIDs[0]) : undefined}
               botName={selectedBot?.name ?? "Notify"}
               botAvatar={selectedBot?.avatar_url}
             />
@@ -373,15 +395,6 @@ function Panel({ label, action, children }: { label: string; action?: ReactNode;
       </div>
       <div className="p-5">{children}</div>
     </section>
-  )
-}
-
-function ChannelOptions({ channel, children }: { channel: Channel; children: ReactNode }) {
-  return (
-    <div className="space-y-3 rounded-md border border-border bg-background/40 p-4">
-      <ChannelTag channel={channel} />
-      {children}
-    </div>
   )
 }
 
@@ -651,54 +664,155 @@ function RecipientPicker({
   )
 }
 
+function DiscordChannelPicker({
+  guilds,
+  loading,
+  error,
+  hasBot,
+  selected,
+  onChange,
+}: {
+  guilds: DiscordGuild[]
+  loading: boolean
+  error: unknown
+  hasBot: boolean
+  selected: string[]
+  onChange: (ids: string[]) => void
+}) {
+  const [search, setSearch] = useState("")
+  const query = search.trim().toLowerCase().replace(/^#/, "")
+  const byID = new Map(guilds.flatMap((guild) => guild.channels.map((guildChannel) => [guildChannel.id, guildChannel] as const)))
+
+  function toggle(id: string) {
+    onChange(selected.includes(id) ? selected.filter((value) => value !== id) : [...selected, id])
+  }
+
+  return (
+    <div className="space-y-2">
+      <Label htmlFor="pg-channel-search" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Hash className="size-3.5" />
+        Channels
+      </Label>
+      {!hasBot && <p className="text-sm text-muted-foreground">Add a Discord bot to post in channels.</p>}
+      {hasBot && (
+        <>
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input id="pg-channel-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search channels" className="pl-8" autoComplete="off" />
+          </div>
+          {selected.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {selected.map((id) => (
+                <span key={id} className="inline-flex items-center gap-1 rounded-sm border border-border bg-muted/60 py-0.5 pr-1 pl-2 text-xs">
+                  #{byID.get(id)?.name ?? id}
+                  <button type="button" onClick={() => toggle(id)} aria-label="Remove" className="rounded-sm p-0.5 text-muted-foreground hover:text-foreground">
+                    <X className="size-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="max-h-64 overflow-y-auto rounded-md border border-border">
+            {loading && <p className="px-3 py-3 text-sm text-muted-foreground">Loading channels…</p>}
+            {!!error && <p className="px-3 py-3 text-sm text-destructive">{apiErrorMessage(error, "Failed to load channels.")}</p>}
+            {!loading && !error && guilds.every((guild) => guild.channels.length === 0) && (
+              <p className="px-3 py-3 text-sm text-muted-foreground">This bot can't post in any channels.</p>
+            )}
+            {guilds.map((guild) => {
+              const channels = guild.channels.filter(
+                (guildChannel) => !query || guildChannel.name.includes(query) || guildChannel.category?.toLowerCase().includes(query),
+              )
+              if (channels.length === 0) return null
+              return (
+                <div key={guild.id}>
+                  <div className="sticky top-0 flex items-center gap-2 border-b border-border bg-card px-3 py-1.5">
+                    {guild.icon_url && <img src={guild.icon_url} alt="" className="size-4 rounded-sm" />}
+                    <Eyebrow>{guild.name}</Eyebrow>
+                  </div>
+                  {channels.map((guildChannel, index) => {
+                    const active = selected.includes(guildChannel.id)
+                    const newCategory = guildChannel.category && guildChannel.category !== channels[index - 1]?.category
+                    return (
+                      <div key={guildChannel.id}>
+                        {newCategory && (
+                          <div className="px-3 pt-2 pb-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
+                            {guildChannel.category}
+                          </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => toggle(guildChannel.id)}
+                          className={cn(
+                            "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors",
+                            active ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                          )}
+                        >
+                          {guildChannel.announcement ? <Megaphone className="size-3.5" /> : <Hash className="size-3.5" />}
+                          <span className="min-w-0 flex-1 truncate">{guildChannel.name}</span>
+                          <span className={cn("size-3 shrink-0 rounded-[2px] border", active ? "border-primary bg-primary" : "border-muted-foreground/40")} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 function Preview({
-  channels,
+  channel,
   subject,
   body,
   emailHTML,
   discordEmbed,
+  discordChannel,
   botName,
   botAvatar,
 }: {
-  channels: Channel[]
+  channel: Channel
   subject: string
   body: string
   emailHTML: string
   discordEmbed: DiscordEmbed | null
+  discordChannel?: string
   botName: string
   botAvatar?: string
 }) {
-  const shownBody = body.trim() || "Your message body shows up here."
+  const shownBody = body.trim() || (channel === "DISCORD" && discordEmbed ? "" : "Your message shows up here.")
 
   return (
     <Panel label="Preview">
-      {channels.length === 0 && <p className="text-sm text-muted-foreground">Pick a channel to preview it.</p>}
-      <div className="space-y-5">
-        {channels.includes("EMAIL") && (
-          <div className="space-y-2">
-            <ChannelTag channel="EMAIL" />
-            <div className="overflow-hidden rounded-md bg-white text-[#18181b]">
-              <div className="border-b border-[#e4e4e7] px-4 py-2.5 text-sm font-semibold">{subject.trim() || "No subject"}</div>
-              {emailHTML.trim() ? (
-                <iframe title="Email HTML preview" sandbox="" srcDoc={emailHTML} className="h-80 w-full bg-white" />
-              ) : (
-                <p className="px-4 py-3 text-sm whitespace-pre-wrap">{shownBody}</p>
-              )}
-            </div>
+      <div className="space-y-2">
+        <ChannelTag channel={channel} />
+        {channel === "EMAIL" && (
+          <div className="overflow-hidden rounded-md bg-white text-[#18181b]">
+            <div className="border-b border-[#e4e4e7] px-4 py-2.5 text-sm font-semibold">{subject.trim() || "No subject"}</div>
+            {emailHTML.trim() ? (
+              <iframe title="Email HTML preview" sandbox="" srcDoc={emailHTML} className="h-[28rem] w-full bg-white" />
+            ) : (
+              <p className="px-4 py-3 text-sm whitespace-pre-wrap">{shownBody}</p>
+            )}
           </div>
         )}
-        {channels.includes("SMS") && (
-          <div className="space-y-2">
-            <ChannelTag channel="SMS" />
-            <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-[#26262b] px-3.5 py-2.5 text-sm whitespace-pre-wrap text-[#f4f4f5]">
-              {shownBody}
-            </div>
+        {channel === "SMS" && (
+          <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-[#26262b] px-3.5 py-2.5 text-sm whitespace-pre-wrap text-[#f4f4f5]">
+            {shownBody}
           </div>
         )}
-        {channels.includes("DISCORD") && (
-          <div className="space-y-2">
-            <ChannelTag channel="DISCORD" />
-            <div className="flex gap-3 rounded-md bg-[#313338] p-3 text-[#dbdee1]">
+        {channel === "DISCORD" && (
+          <div className="overflow-hidden rounded-md bg-[#313338] text-[#dbdee1]">
+            {discordChannel && (
+              <div className="flex items-center gap-1.5 border-b border-black/20 px-3 py-2 text-sm font-semibold text-[#f2f3f5]">
+                <Hash className="size-4 text-[#80848e]" />
+                {discordChannel}
+              </div>
+            )}
+            <div className="flex gap-3 p-3">
               <Avatar>
                 {botAvatar && <AvatarImage src={botAvatar} alt="" />}
                 <AvatarFallback>{botName.slice(0, 1).toUpperCase()}</AvatarFallback>
@@ -708,9 +822,10 @@ function Preview({
                   <span className="text-sm font-medium text-[#f2f3f5]">{botName}</span>
                   <span className="rounded-[3px] bg-[#5865f2] px-1 text-[10px] font-semibold text-white">APP</span>
                 </div>
-                {discordEmbed ? (
+                {shownBody && <div className="text-sm whitespace-pre-wrap">{shownBody}</div>}
+                {discordEmbed && (
                   <div
-                    className="max-w-md rounded-sm border-l-4 bg-[#2b2d31] px-3.5 py-3"
+                    className="mt-1 max-w-md rounded-sm border-l-4 bg-[#2b2d31] px-3.5 py-3"
                     style={{ borderColor: `#${(discordEmbed.color ?? 0).toString(16).padStart(6, "0")}` }}
                   >
                     {discordEmbed.title && (
@@ -721,8 +836,6 @@ function Preview({
                     {discordEmbed.description && <div className="text-sm whitespace-pre-wrap">{discordEmbed.description}</div>}
                     {discordEmbed.footer && <div className="mt-2 text-[11px] text-[#949ba4]">{discordEmbed.footer.text}</div>}
                   </div>
-                ) : (
-                  <div className="text-sm whitespace-pre-wrap">{shownBody}</div>
                 )}
               </div>
             </div>
@@ -733,7 +846,7 @@ function Preview({
   )
 }
 
-function TransmissionLog({ messageID, onClear }: { messageID: string; onClear: () => void }) {
+function TransmissionLog({ messageID, channelNames, onClear }: { messageID: string; channelNames: Map<string, string>; onClear: () => void }) {
   const detail = useQuery({
     queryKey: ["playgroundMessage", messageID],
     queryFn: () => getMessage(messageID),
@@ -744,7 +857,7 @@ function TransmissionLog({ messageID, onClear }: { messageID: string; onClear: (
     },
   })
   const deliveries = detail.data?.deliveries ?? []
-  const directory = useIdentityDirectory(deliveries.map((delivery) => delivery.entity_id))
+  const directory = useIdentityDirectory(deliveries.flatMap((delivery) => (delivery.entity_id ? [delivery.entity_id] : [])))
   const inFlight = deliveries.some((delivery) => delivery.status === "PENDING" || delivery.status === "SENDING")
 
   return (
@@ -768,13 +881,20 @@ function TransmissionLog({ messageID, onClear }: { messageID: string; onClear: (
         {deliveries.map((delivery) => (
           <div key={delivery.id} className="space-y-1 px-3 py-2.5">
             <div className="flex items-center justify-between gap-3">
-              <IdentityDisplay
-                entityID={delivery.entity_id}
-                identity={directory.byID.get(delivery.entity_id)}
-                loading={directory.isLoading}
-                size="sm"
-                showDetails={false}
-              />
+              {delivery.discord_channel_id ? (
+                <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
+                  <Hash className="size-3.5 text-muted-foreground" />
+                  <span className="truncate">{channelNames.get(delivery.discord_channel_id) ?? delivery.discord_channel_id}</span>
+                </span>
+              ) : (
+                <IdentityDisplay
+                  entityID={delivery.entity_id ?? ""}
+                  identity={directory.byID.get(delivery.entity_id ?? "")}
+                  loading={directory.isLoading}
+                  size="sm"
+                  showDetails={false}
+                />
+              )}
               <span className="flex shrink-0 items-center gap-3">
                 <ChannelTag channel={delivery.channel} />
                 <span className="flex w-20 items-center justify-end gap-1.5 font-mono text-[10px] uppercase tracking-[0.12em]">

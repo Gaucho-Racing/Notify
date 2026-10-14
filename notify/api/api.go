@@ -80,6 +80,7 @@ func InitializeRoutes(router *gin.Engine) {
 	router.GET("/discord-bots", ListDiscordBots)
 	router.POST("/discord-bots", CreateDiscordBot)
 	router.GET("/discord-bots/:botID", GetDiscordBot)
+	router.GET("/discord-bots/:botID/channels", ListDiscordBotChannels)
 	router.PATCH("/discord-bots/:botID", UpdateDiscordBot)
 	router.DELETE("/discord-bots/:botID", DeleteDiscordBot)
 

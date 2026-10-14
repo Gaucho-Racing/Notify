@@ -6,9 +6,12 @@ import (
 	"github.com/gaucho-racing/notify/notify/pkg/discord"
 )
 
+// MessageRecipients names people (directly or through groups) and, for
+// Discord, guild channels to post in.
 type MessageRecipients struct {
-	EntityIDs []string `json:"entity_ids"`
-	GroupIDs  []string `json:"group_ids"`
+	EntityIDs         []string `json:"entity_ids"`
+	GroupIDs          []string `json:"group_ids"`
+	DiscordChannelIDs []string `json:"discord_channel_ids,omitempty"`
 }
 
 // Message is one send request as the calling application made it. Group
@@ -22,15 +25,15 @@ type Message struct {
 	SenderType     ActorType `json:"sender_type"`
 	Subject        string    `json:"subject"`
 	Body           string    `json:"body"`
-	// EmailHTML and DiscordEmbeds are the caller's rich versions; when unset
-	// those channels send Body as plain text, as SMS always does.
+	// Body is the email's plain text, the SMS, or the Discord message
+	// content. EmailHTML and DiscordEmbeds are the rich versions.
 	EmailHTML     string          `json:"email_html,omitempty" gorm:"column:html"`
 	DiscordEmbeds []discord.Embed `json:"discord_embeds,omitempty" gorm:"serializer:json;type:jsonb"`
 	Category      string          `json:"category,omitempty" gorm:"index"`
 	Metadata      map[string]any  `json:"metadata" gorm:"serializer:json;type:jsonb"`
-	Channels      []Channel       `json:"channels" gorm:"serializer:json;type:jsonb"`
-	// DiscordBotID, EmailSenderID, and SMSSenderID are resolved at send time,
-	// falling back to the defaults, so retries go out the same way even if a
+	Channel       Channel         `json:"channel" gorm:"index"`
+	// Only the sender for Channel is set. It is resolved at send time,
+	// falling back to the default, so retries go out the same way even if the
 	// default changes.
 	DiscordBotID   string            `json:"discord_bot_id,omitempty" gorm:"index"`
 	EmailSenderID  string            `json:"email_sender_id,omitempty" gorm:"index"`

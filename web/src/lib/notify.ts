@@ -82,6 +82,25 @@ export async function listDiscordBots() {
   return response.data
 }
 
+export type DiscordGuildChannel = {
+  id: string
+  name: string
+  category?: string
+  announcement?: boolean
+}
+
+export type DiscordGuild = {
+  id: string
+  name: string
+  icon_url?: string
+  channels: DiscordGuildChannel[]
+}
+
+export async function listDiscordBotChannels(id: string) {
+  const response = await api.get<DiscordGuild[]>(`/discord-bots/${encodeURIComponent(id)}/channels`)
+  return response.data
+}
+
 export async function createDiscordBot(input: DiscordBotInput) {
   const response = await api.post<DiscordBot>("/discord-bots", input)
   return response.data
@@ -318,7 +337,8 @@ export type DeliveryStatus = "PENDING" | "SENDING" | "SENT" | "FAILED" | "SKIPPE
 export type Delivery = {
   id: string
   message_id: string
-  entity_id: string
+  entity_id?: string
+  discord_channel_id?: string
   channel: Channel
   provider: string
   destination: string
@@ -338,20 +358,18 @@ export type DiscordEmbed = {
 }
 
 export type SendMessageInput = {
-  recipients: { entity_ids: string[]; group_ids: string[] }
-  channels: Channel[]
-  subject?: string
-  body: string
+  channel: Channel
+  recipients: { entity_ids: string[]; group_ids: string[]; discord_channel_ids?: string[] }
   category?: string
-  email?: { sender_id?: string; html?: string }
-  sms?: { sender_id?: string }
-  discord?: { bot_id?: string; embeds?: DiscordEmbed[] }
+  email?: { sender_id?: string; subject: string; body: string; html?: string }
+  sms?: { sender_id?: string; body: string }
+  discord?: { bot_id?: string; content?: string; embeds?: DiscordEmbed[] }
 }
 
 export type Message = {
   id: string
   subject: string
-  channels: Channel[]
+  channel: Channel
   recipient_count: number
   created_at: string
 }

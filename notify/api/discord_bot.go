@@ -67,6 +67,20 @@ func ListDiscordBots(c *gin.Context) {
 	c.JSON(http.StatusOK, summaries)
 }
 
+// ListDiscordBotChannels is open to the same callers as ListDiscordBots so a
+// sending app can discover which discord_channel_ids it may use.
+func ListDiscordBotChannels(c *gin.Context) {
+	Require(c, RequestTokenExists(c))
+	Require(c, RequestTokenIsAdmin(c) || !RequestTokenIsFirstParty(c))
+
+	guilds, err := service.ListDiscordBotChannels(c.Request.Context(), c.Param("botID"))
+	if err != nil {
+		respondDiscordBotError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, guilds)
+}
+
 func GetDiscordBot(c *gin.Context) {
 	Require(c, RequestTokenIsAdmin(c))
 

@@ -25,7 +25,7 @@ var (
 	ErrDefaultDiscordBotHeld = errors.New("the default discord bot cannot be disabled or deleted; make another bot the default first")
 	ErrInvalidDiscordToken   = errors.New("discord rejected the bot token")
 	ErrDiscordTokenNotBot    = errors.New("the token belongs to a user account, not a bot")
-	ErrDiscordUnreachable    = errors.New("could not verify the token with discord")
+	ErrDiscordUnreachable    = errors.New("could not reach Discord")
 )
 
 type DiscordBotInput struct {
@@ -262,4 +262,26 @@ func applyDiscordToken(ctx context.Context, bot *model.DiscordBot, token string)
 	bot.TokenCiphertext = ciphertext
 	bot.TokenHint = token[len(token)-discordTokenHintLength:]
 	return nil
+}
+
+// ListDiscordBotChannels returns the guild channels the bot can post in. The
+// bot need not be enabled, so admins can see where a bot reaches before
+// turning it on.
+func ListDiscordBotChannels(ctx context.Context, id string) ([]discord.Guild, error) {
+	bot, err := GetDiscordBot(id)
+	if err != nil {
+		return nil, err
+	}
+	if config.Secrets == nil {
+		return nil, secretbox.ErrNotConfigured
+	}
+	token, err := config.Secrets.Open(bot.TokenCiphertext, bot.ID)
+	if err != nil {
+		return nil, err
+	}
+	guilds, err := discord.ListPostableChannels(ctx, token, bot.DiscordUserID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrDiscordUnreachable, err)
+	}
+	return guilds, nil
 }

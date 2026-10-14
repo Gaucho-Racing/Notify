@@ -26,10 +26,13 @@ func (s DeliveryStatus) Valid() bool {
 // also the work queue: workers claim PENDING rows whose NextAttemptAt has
 // passed.
 type Delivery struct {
-	ID                string         `json:"id" gorm:"primaryKey"`
-	MessageID         string         `json:"message_id" gorm:"index"`
-	ClientID          string         `json:"client_id" gorm:"index"`
-	EntityID          string         `json:"entity_id" gorm:"index"`
+	ID        string `json:"id" gorm:"primaryKey"`
+	MessageID string `json:"message_id" gorm:"index"`
+	ClientID  string `json:"client_id" gorm:"index"`
+	EntityID  string `json:"entity_id,omitempty" gorm:"index"`
+	// DiscordChannelID is set instead of EntityID when the delivery posts to
+	// a guild channel rather than reaching a person.
+	DiscordChannelID  string         `json:"discord_channel_id,omitempty"`
 	Channel           Channel        `json:"channel" gorm:"index"`
 	Provider          string         `json:"provider"`
 	Destination       string         `json:"destination"`

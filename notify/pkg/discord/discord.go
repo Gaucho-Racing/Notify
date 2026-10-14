@@ -17,10 +17,13 @@ const baseURL = "https://discord.com/api/v10"
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 const (
-	codeUnknownUser       = 10013
-	codeCannotMessageUser = 50007
-	codeInvalidFormBody   = 50035
-	codeInvalidRecipient  = 50033
+	codeUnknownUser        = 10013
+	codeCannotMessageUser  = 50007
+	codeInvalidFormBody    = 50035
+	codeInvalidRecipient   = 50033
+	codeUnknownChannel     = 10003
+	codeMissingAccess      = 50001
+	codeMissingPermissions = 50013
 )
 
 type Embed struct {
@@ -58,9 +61,18 @@ type EmbedField struct {
 }
 
 type Message struct {
-	Content string  `json:"content,omitempty"`
-	Embeds  []Embed `json:"embeds,omitempty"`
+	Content         string           `json:"content,omitempty"`
+	Embeds          []Embed          `json:"embeds,omitempty"`
+	AllowedMentions *AllowedMentions `json:"allowed_mentions,omitempty"`
 }
+
+type AllowedMentions struct {
+	Parse []string `json:"parse"`
+}
+
+// NoMassMentions lets user and role mentions ping but never @everyone or
+// @here, so one message cannot notify an entire server.
+var NoMassMentions = &AllowedMentions{Parse: []string{"users", "roles"}}
 
 type Error struct {
 	StatusCode int
@@ -73,11 +85,13 @@ func (e Error) Error() string {
 	return fmt.Sprintf("discord error: [%d] %d %s", e.StatusCode, e.Code, e.Message)
 }
 
-// Permanent is limited to failures specific to the recipient — DMs closed,
-// unknown account — so a revoked bot token still retries until it is fixed.
+// Permanent is limited to failures specific to the destination — DMs closed,
+// unknown account or channel, no access to the channel — so a revoked bot
+// token still retries until it is fixed.
 func (e Error) Permanent() bool {
 	switch e.Code {
-	case codeUnknownUser, codeCannotMessageUser, codeInvalidRecipient, codeInvalidFormBody:
+	case codeUnknownUser, codeCannotMessageUser, codeInvalidRecipient, codeInvalidFormBody,
+		codeUnknownChannel, codeMissingAccess, codeMissingPermissions:
 		return true
 	}
 	return false
@@ -85,6 +99,17 @@ func (e Error) Permanent() bool {
 
 func (e Error) RetryAfterDuration() time.Duration {
 	return time.Duration(e.RetryAfter * float64(time.Second))
+}
+
+// SendChannelMessage posts to a guild channel the bot can write to.
+func SendChannelMessage(ctx context.Context, token string, channelID string, message Message) (string, error) {
+	var sent struct {
+		ID string `json:"id"`
+	}
+	if err := call(ctx, token, http.MethodPost, "/channels/"+url.PathEscape(channelID)+"/messages", message, &sent); err != nil {
+		return "", err
+	}
+	return sent.ID, nil
 }
 
 // SendDirectMessage opens (or reuses) the DM channel with a user and posts to

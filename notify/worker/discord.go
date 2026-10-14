@@ -30,9 +30,13 @@ func (discordSender) Send(ctx context.Context, outbound Outbound, destination st
 	if err != nil {
 		return "", err
 	}
-	message := discord.Message{Content: outbound.Message.Body}
-	if len(outbound.Message.DiscordEmbeds) > 0 {
-		message = discord.Message{Embeds: outbound.Message.DiscordEmbeds}
+	message := discord.Message{
+		Content:         outbound.Message.Body,
+		Embeds:          outbound.Message.DiscordEmbeds,
+		AllowedMentions: discord.NoMassMentions,
+	}
+	if outbound.ToChannel {
+		return discord.SendChannelMessage(ctx, token, destination, message)
 	}
 	return discord.SendDirectMessage(ctx, token, destination, message)
 }

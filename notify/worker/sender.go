@@ -13,6 +13,9 @@ type Outbound struct {
 	DeliveryID string
 	Message    model.Message
 	Contact    sentinel.Contact
+	// ToChannel means destination is a Discord channel ID, not a person's
+	// address.
+	ToChannel bool
 }
 
 type Sender interface {
