@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 @theme {
-  --font-brand: "Chakra Petch", sans-serif;
+  --font-brand: "Inter Variable", sans-serif;
 }
 
 @layer base {
