@@ -63,7 +63,7 @@ export default function DashboardPage() {
                 onClick={() => setDays(window)}
                 className={cn(
                   "rounded-sm px-2.5 py-1 tabular-nums transition-colors",
-                  days === window ? "bg-brand text-white" : "text-muted-foreground hover:text-foreground",
+                  days === window ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {window}D
@@ -82,7 +82,7 @@ export default function DashboardPage() {
       <section className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-6">
         <div className="col-span-2 bg-card p-5 sm:col-span-1">
           <Eyebrow>Delivery rate</Eyebrow>
-          <div className="mt-2 font-mono text-3xl font-medium tabular-nums text-brand">
+          <div className="mt-2 font-mono text-3xl font-medium tabular-nums text-primary">
             {stats.isLoading ? <Skeleton className="h-9 w-20" /> : formatRate(rate)}
           </div>
         </div>
@@ -131,7 +131,7 @@ export default function DashboardPage() {
                   axisLine={false}
                   tickLine={false}
                 />
-                <Tooltip cursor={{ fill: "rgb(132 18 252 / 10%)" }} content={(props) => <ActivityTooltip {...props} />} />
+                <Tooltip cursor={{ fill: "rgb(225 5 163 / 8%)" }} content={(props) => <ActivityTooltip {...props} />} />
                 {SERIES.map((series) => (
                   <Bar key={series.key} dataKey={series.key} name={series.label} stackId="deliveries" fill={series.color} />
                 ))}

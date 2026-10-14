@@ -40,7 +40,7 @@ export function AppSidebar() {
                     className={cn(
                       "relative flex h-8 items-center gap-2.5 rounded-sm px-2 text-[13px] transition-colors",
                       active
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:inset-y-1.5 before:-left-3 before:w-0.5 before:bg-gradient-to-b before:from-gr-purple before:to-gr-pink"
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:inset-y-1.5 before:-left-3 before:w-0.5 before:bg-primary"
                         : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
                   >

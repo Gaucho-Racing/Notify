@@ -10,7 +10,7 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-brand text-white shadow-[0_0_20px_-6px_var(--gr-pink)] hover:brightness-110 hover:shadow-[0_0_24px_-4px_var(--gr-pink)]",
+          "bg-primary text-primary-foreground hover:bg-primary/90",
         outline:
           "border-border bg-card/60 hover:border-primary/40 hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
         secondary:

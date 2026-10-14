@@ -12,8 +12,6 @@
     --font-heading: 'Chakra Petch', var(--font-sans);
     --font-sans: 'Inter Variable', sans-serif;
     --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', monospace;
-    --color-gr-purple: var(--gr-purple);
-    --color-gr-pink: var(--gr-pink);
     --color-channel-email: var(--channel-email);
     --color-channel-sms: var(--channel-sms);
     --color-channel-discord: var(--channel-discord);
@@ -74,8 +72,8 @@
     --secondary-foreground: #d5dde7;
     --muted: #141a23;
     --muted-foreground: #7d8a9a;
-    --accent: rgb(132 18 252 / 12%);
-    --accent-foreground: #e4ccff;
+    --accent: rgb(225 5 163 / 10%);
+    --accent-foreground: #ffc9ef;
     --destructive: #ff5d5d;
     --border: rgb(148 163 184 / 13%);
     --input: rgb(148 163 184 / 18%);
@@ -90,7 +88,7 @@
     --sidebar-foreground: #d5dde7;
     --sidebar-primary: #e105a3;
     --sidebar-primary-foreground: #ffffff;
-    --sidebar-accent: rgb(132 18 252 / 12%);
+    --sidebar-accent: rgb(225 5 163 / 9%);
     --sidebar-accent-foreground: #e6edf3;
     --sidebar-border: rgb(148 163 184 / 11%);
     --sidebar-ring: #e105a3;
@@ -102,8 +100,6 @@
     --status-pending: #fbbf24;
     --status-skipped: #64748b;
     --grid-line: rgb(148 163 184 / 4.5%);
-    --gr-purple: #8412fc;
-    --gr-pink: #e105a3;
 }
 
 @layer base {
