@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { Copy, FileUp, Search, Send, UserRound, Users, X } from "lucide-react"
-import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react"
+import { useMemo, useRef, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from "react"
 import { toast } from "sonner"
 
 import { IdentityDisplay } from "@/components/IdentityDisplay"
@@ -458,17 +458,32 @@ function Meter({ label, value, max }: { label: string; value: number; max: numbe
 
 function HTMLInput({ value, bytes, onChange }: { value: string; bytes: number; onChange: (value: string) => void }) {
   const fileInput = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
 
-  async function loadFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ""
-    if (!file) return
+  async function load(file: File) {
+    if (!/\.html?$/i.test(file.name) && file.type !== "text/html") {
+      toast.error("Drop an .html file.")
+      return
+    }
     if (file.size > EMAIL_HTML_MAX_BYTES) {
       toast.error("That file is over 100 KB.")
       return
     }
     onChange(await file.text())
     toast.success(`Loaded ${file.name}`)
+  }
+
+  function handlePick(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (file) void load(file)
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setDragging(false)
+    const file = event.dataTransfer.files[0]
+    if (file) void load(file)
   }
 
   return (
@@ -483,17 +498,37 @@ function HTMLInput({ value, bytes, onChange }: { value: string; bytes: number; o
             <FileUp className="size-3.5" />
             Load .html
           </Button>
-          <input ref={fileInput} type="file" accept=".html,.htm,text/html" className="hidden" onChange={loadFile} />
+          <input ref={fileInput} type="file" accept=".html,.htm,text/html" className="hidden" onChange={handlePick} />
         </div>
       </div>
-      <Textarea
-        id="pg-html"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        rows={8}
-        className="font-mono text-xs"
-        placeholder="<!doctype html>…  The body above is still sent as the plain-text version."
-      />
+      <div
+        className="relative"
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes("Files")) return
+          event.preventDefault()
+          event.dataTransfer.dropEffect = "copy"
+          setDragging(true)
+        }}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false)
+        }}
+        onDrop={handleDrop}
+      >
+        <Textarea
+          id="pg-html"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          rows={8}
+          className="font-mono text-xs"
+          placeholder="Paste HTML or drop an .html file here. The body above is still sent as the plain-text version."
+        />
+        {dragging && (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary bg-background/90 text-sm">
+            <FileUp className="size-5 text-primary" />
+            Drop to load the HTML
+          </div>
+        )}
+      </div>
     </div>
   )
 }
