@@ -1,4 +1,4 @@
-import { Bot, KeyRound, LayoutDashboard, Mail, MessageSquare, Phone, Settings, type LucideIcon } from "lucide-react"
+import { Bot, KeyRound, LayoutDashboard, Mail, MessageSquare, Phone, Send, Settings, type LucideIcon } from "lucide-react"
 
 import type { Channel } from "@/lib/notify"
 
@@ -16,7 +16,13 @@ export type NavGroup = {
 }
 
 export const NAV_GROUPS: NavGroup[] = [
-  { label: "Overview", items: [{ to: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] },
+  {
+    label: "Overview",
+    items: [
+      { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+      { to: "/playground", label: "Playground", icon: Send, adminOnly: true },
+    ],
+  },
   {
     label: "Email",
     channel: "EMAIL",

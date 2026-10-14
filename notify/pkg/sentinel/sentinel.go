@@ -211,6 +211,50 @@ func GetGroups(accessToken string) ([]Group, error) {
 	return groups, nil
 }
 
+// GetUsers lists every Sentinel user with the caller's token, which needs the
+// user:read scope Notify's own login already requests.
+func GetUsers(accessToken string) ([]User, error) {
+	users := []User{}
+	if err := userTokenGet(accessToken, "/api/users", &users); err != nil {
+		return []User{}, err
+	}
+	return users, nil
+}
+
+func userTokenGet(accessToken string, path string, out interface{}) error {
+	if strings.TrimSpace(config.SentinelURL) == "" {
+		return fmt.Errorf("SENTINEL_URL is not configured")
+	}
+	if strings.TrimSpace(accessToken) == "" {
+		return fmt.Errorf("access token is required")
+	}
+	req, err := http.NewRequest(http.MethodGet, strings.TrimRight(config.SentinelURL, "/")+path, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		var sentinelErr Error
+		if err := json.Unmarshal(respBody, &sentinelErr); err == nil && sentinelErr.Message != "" {
+			sentinelErr.Code = resp.StatusCode
+			return sentinelErr
+		}
+		return Error{Code: resp.StatusCode, Message: strings.TrimSpace(string(respBody))}
+	}
+	return json.Unmarshal(respBody, out)
+}
+
 // GetApplications lists every Sentinel application using Notify's own service
 // account token rather than the caller's. Notify already decides who may see
 // the list (admins only), so forwarding a user token would just mean every

@@ -288,3 +288,80 @@ export async function updateSMSSender(id: string, input: SMSSenderInput) {
 export async function deleteSMSSender(id: string) {
   await api.delete(`/sms-senders/${encodeURIComponent(id)}`)
 }
+
+export type SentinelGroup = {
+  id: string
+  name: string
+  description: string
+  member_count: number
+}
+
+export type SentinelUser = {
+  entity_id: string
+  name: string
+  username: string
+  avatar_url: string
+}
+
+export async function listGroups() {
+  const response = await api.get<SentinelGroup[]>("/groups")
+  return response.data
+}
+
+export async function listUsers() {
+  const response = await api.get<SentinelUser[]>("/users")
+  return response.data
+}
+
+export type DeliveryStatus = "PENDING" | "SENDING" | "SENT" | "FAILED" | "SKIPPED"
+
+export type Delivery = {
+  id: string
+  message_id: string
+  entity_id: string
+  channel: Channel
+  provider: string
+  destination: string
+  status: DeliveryStatus
+  attempts: number
+  last_error?: string
+  sent_at?: string
+  created_at: string
+}
+
+export type SendMessageInput = {
+  recipients: { entity_ids: string[]; group_ids: string[] }
+  channels: Channel[]
+  email_sender_id?: string
+  sms_sender_id?: string
+  discord_bot_id?: string
+  subject: string
+  body: string
+  action_url?: string
+  action_label?: string
+  category?: string
+}
+
+export type Message = {
+  id: string
+  subject: string
+  channels: Channel[]
+  recipient_count: number
+  created_at: string
+}
+
+export type MessageDetail = {
+  message: Message
+  summary: Partial<Record<DeliveryStatus, number>>
+  deliveries: Delivery[]
+}
+
+export async function sendMessage(input: SendMessageInput) {
+  const response = await api.post<Message>("/messages", input)
+  return response.data
+}
+
+export async function getMessage(id: string) {
+  const response = await api.get<MessageDetail>(`/messages/${encodeURIComponent(id)}`)
+  return response.data
+}

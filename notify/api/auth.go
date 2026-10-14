@@ -3,6 +3,8 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 
 	"github.com/gaucho-racing/notify/notify/config"
 	"github.com/gaucho-racing/notify/notify/pkg/logger"
@@ -88,6 +90,40 @@ func ListSentinelGroups(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, groups)
+}
+
+// userSummary is the slice of a Sentinel user the playground needs to pick a
+// recipient; contact details stay in Sentinel.
+type userSummary struct {
+	EntityID  string `json:"entity_id"`
+	Name      string `json:"name"`
+	Username  string `json:"username"`
+	AvatarURL string `json:"avatar_url"`
+}
+
+func ListSentinelUsers(c *gin.Context) {
+	Require(c, RequestTokenIsAdmin(c))
+
+	users, err := sentinel.GetUsers(GetRequestToken(c))
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		return
+	}
+	summaries := make([]userSummary, 0, len(users))
+	for _, user := range users {
+		if user.EntityID == "" {
+			continue
+		}
+		name := strings.TrimSpace(user.FirstName + " " + user.LastName)
+		if name == "" {
+			name = user.Username
+		}
+		summaries = append(summaries, userSummary{EntityID: user.EntityID, Name: name, Username: user.Username, AvatarURL: user.AvatarURL})
+	}
+	sort.Slice(summaries, func(i, j int) bool {
+		return strings.ToLower(summaries[i].Name) < strings.ToLower(summaries[j].Name)
+	})
+	c.JSON(http.StatusOK, summaries)
 }
 
 func ListSentinelApplications(c *gin.Context) {
