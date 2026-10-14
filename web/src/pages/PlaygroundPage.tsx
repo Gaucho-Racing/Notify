@@ -304,7 +304,7 @@ export default function PlaygroundPage() {
                 />
               )}
               <div className="space-y-4">
-                {channel === "DISCORD" && <Eyebrow>Direct messages</Eyebrow>}
+                {channel === "DISCORD" && <Eyebrow className="block">Direct messages</Eyebrow>}
                 <RecipientPicker
                   users={users.data ?? []}
                   usersError={users.error}
