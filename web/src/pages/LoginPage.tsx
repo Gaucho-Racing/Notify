@@ -1,7 +1,8 @@
-import { Loader2 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 
+import { NotifyMark } from "@/components/NotifyMark"
+import { Eyebrow } from "@/components/Telemetry"
 import { api } from "@/lib/api"
 import { clearSession, saveSession } from "@/lib/auth"
 
@@ -79,8 +80,8 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-5 text-center">
         {loading && (
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="size-8 animate-spin text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Redirecting to Sentinel...</p>
+            <NotifyMark className="size-8 animate-[signal-pulse_1.6s_ease-in-out_infinite] text-primary" />
+            <Eyebrow>Connecting to Sentinel</Eyebrow>
           </div>
         )}
 

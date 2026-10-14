@@ -30,7 +30,7 @@ export function ApplicationIcon({
       className={cn(
         iconSizes[size],
         "flex shrink-0 items-center justify-center overflow-hidden",
-        !imageURL && "bg-gradient-to-br from-gr-pink to-gr-purple font-semibold text-white",
+        !imageURL && "border border-primary/30 bg-primary/10 font-mono font-semibold text-primary",
       )}
     >
       {imageURL ? (

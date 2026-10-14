@@ -38,6 +38,13 @@ export type Stats = {
   top_errors: ErrorCount[]
 }
 
+export type ActivityPoint = StatusCounts & { date: string }
+
+export async function getActivityStats(days: number) {
+  const response = await api.get<ActivityPoint[]>("/stats/activity", { params: { days } })
+  return response.data
+}
+
 export async function listSentinelApplications() {
   const response = await api.get<SentinelApplication[]>("/applications")
   return response.data

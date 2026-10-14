@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { PageContainer, PageHeader } from "@/components/PageContainer"
+import { ChannelTag, ChannelTile } from "@/components/Telemetry"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -36,6 +37,7 @@ import {
   type EmailSenderInput,
   type ResendAccount,
 } from "@/lib/notify"
+import { cn } from "@/lib/utils"
 
 const EMAIL_SENDERS_KEY = ["emailSenders"]
 
@@ -65,6 +67,7 @@ export default function EmailSendersPage() {
   return (
     <PageContainer>
       <PageHeader
+        eyebrow={<ChannelTag channel="EMAIL" />}
         title="Email senders"
         description="From addresses Notify can send email as. Senders pick one with email_sender_id, or get the default."
         action={
@@ -161,12 +164,12 @@ function EmailSenderRow({
   }
 
   return (
-    <Card>
+    <Card className={cn(!sender.enabled && "opacity-60")}>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <Mail className="size-5" />
-          </div>
+          <ChannelTile channel="EMAIL">
+              <Mail className="size-4" />
+            </ChannelTile>
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{sender.name}</span>

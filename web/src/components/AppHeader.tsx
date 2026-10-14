@@ -1,11 +1,14 @@
-import { Bell, Bot, KeyRound, LayoutDashboard, LogOut, Mail, Menu, MessageSquare, Phone, Settings } from "lucide-react"
+import { LogOut, Menu, Settings } from "lucide-react"
+import { useEffect, useState } from "react"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 
+import { NotifyMark } from "@/components/NotifyMark"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -13,27 +16,16 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/lib/auth"
+import { activeNavLocation, isNavActive, visibleNavGroups } from "@/lib/nav"
 import { cn } from "@/lib/utils"
 
-const mobileItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/email-senders", label: "Email senders", icon: Mail, adminOnly: true },
-  { to: "/resend-accounts", label: "Resend accounts", icon: KeyRound, adminOnly: true },
-  { to: "/sms-senders", label: "SMS senders", icon: MessageSquare, adminOnly: true },
-  { to: "/twilio-accounts", label: "Twilio accounts", icon: Phone, adminOnly: true },
-  { to: "/discord-bots", label: "Discord bots", icon: Bot, adminOnly: true },
-  { to: "/settings", label: "Settings", icon: Settings },
-]
-
-function sectionTitle(pathname: string) {
-  if (pathname.startsWith("/settings")) return "Settings"
-  if (pathname.startsWith("/discord-bots")) return "Discord bots"
-  if (pathname.startsWith("/email-senders")) return "Email senders"
-  if (pathname.startsWith("/resend-accounts")) return "Resend accounts"
-  if (pathname.startsWith("/sms-senders")) return "SMS senders"
-  if (pathname.startsWith("/twilio-accounts")) return "Twilio accounts"
-  if (pathname.startsWith("/dashboard")) return "Dashboard"
-  return "Notify"
+function useUTCClock() {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(interval)
+  }, [])
+  return now.toISOString().slice(11, 19)
 }
 
 function initials(name: string) {
@@ -89,11 +81,12 @@ function HeaderUserMenu() {
 
 export function AppHeader() {
   const { pathname } = useLocation()
-  const section = sectionTitle(pathname)
+  const location = activeNavLocation(pathname)
   const { isAdmin } = useAuth()
+  const clock = useUTCClock()
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/60 bg-background/90 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/75 lg:px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/80 px-4 backdrop-blur-md lg:px-8">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="icon" className="lg:hidden">
@@ -101,35 +94,46 @@ export function AppHeader() {
             <span className="sr-only">Open navigation</span>
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" className="w-52">
-          <DropdownMenuLabel>Notify</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          {mobileItems.filter((item) => isAdmin || !item.adminOnly).map((item) => (
-            <DropdownMenuItem key={item.to} asChild>
-              <Link
-                to={item.to}
-                className={cn(pathname.startsWith(item.to) && "text-gr-purple")}
-              >
-                <item.icon className="size-4" />
-                {item.label}
-              </Link>
-            </DropdownMenuItem>
+        <DropdownMenuContent align="start" className="w-56">
+          {visibleNavGroups(isAdmin).map((group, index) => (
+            <DropdownMenuGroup key={group.label}>
+              {index > 0 && <DropdownMenuSeparator />}
+              <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+                {group.label}
+              </DropdownMenuLabel>
+              {group.items.map((item) => (
+                <DropdownMenuItem key={item.to} asChild>
+                  <Link to={item.to} className={cn(isNavActive(pathname, item.to) && "text-primary")}>
+                    <item.icon className="size-4" />
+                    {item.label}
+                  </Link>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuGroup>
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
       <Link to="/dashboard" className="flex items-center gap-2 lg:hidden">
-        <div className="flex size-8 items-center justify-center rounded-lg bg-gradient-to-br from-gr-purple to-gr-pink text-primary-foreground shadow-sm shadow-primary/20">
-          <Bell className="size-4" />
-        </div>
-        <span className="text-sm font-semibold">Notify</span>
+        <NotifyMark className="size-4 text-primary" />
+        <span className="font-heading text-base font-semibold lowercase tracking-wide">notify</span>
       </Link>
 
-      <div className="hidden min-w-0 lg:block">
-        <div className="text-lg font-semibold leading-none">{section}</div>
+      <div className="hidden min-w-0 items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] lg:flex">
+        <span className="text-muted-foreground">{location?.group.label ?? "Notify"}</span>
+        {location && (
+          <>
+            <span className="text-muted-foreground/50">/</span>
+            <span className="text-foreground">{location.item.label}</span>
+          </>
+        )}
       </div>
 
       <div className="flex-1" />
+
+      <span className="hidden font-mono text-[11px] tabular-nums tracking-wider text-muted-foreground sm:inline">
+        {clock} <span className="text-muted-foreground/60">UTC</span>
+      </span>
 
       <HeaderUserMenu />
     </header>

@@ -1,66 +1,72 @@
-import { Bell, Bot, KeyRound, LayoutDashboard, Mail, MessageSquare, Phone, Settings } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
-import { Badge } from "@/components/ui/badge"
+import { NotifyMark } from "@/components/NotifyMark"
+import { Eyebrow, SignalDot } from "@/components/Telemetry"
 import { useAuth } from "@/lib/auth"
+import { isNavActive, visibleNavGroups } from "@/lib/nav"
 import { envLabel, useNotifyStatus } from "@/lib/status"
 import { cn } from "@/lib/utils"
 
-const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/email-senders", label: "Email senders", icon: Mail, adminOnly: true },
-  { to: "/resend-accounts", label: "Resend accounts", icon: KeyRound, adminOnly: true },
-  { to: "/sms-senders", label: "SMS senders", icon: MessageSquare, adminOnly: true },
-  { to: "/twilio-accounts", label: "Twilio accounts", icon: Phone, adminOnly: true },
-  { to: "/discord-bots", label: "Discord bots", icon: Bot, adminOnly: true },
-  { to: "/settings", label: "Settings", icon: Settings },
-]
-
-function isActive(currentPath: string, target: string) {
-  return currentPath === target || currentPath.startsWith(`${target}/`)
+const CHANNEL_DOTS = {
+  EMAIL: "bg-channel-email",
+  SMS: "bg-channel-sms",
+  DISCORD: "bg-channel-discord",
 }
 
 export function AppSidebar() {
   const { pathname } = useLocation()
-  const { env } = useNotifyStatus()
+  const { env, version, online } = useNotifyStatus()
   const { isAdmin } = useAuth()
   const environment = envLabel(env)
 
   return (
-    <aside className="hidden border-r border-sidebar-border/70 bg-sidebar text-sidebar-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col">
-      <div className="flex h-16 items-center gap-3 border-b border-sidebar-border/70 px-4">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-gradient-to-br from-gr-purple to-gr-pink text-primary-foreground shadow-sm shadow-primary/25">
-          <Bell className="size-5" />
-        </div>
-        <div className="min-w-0 text-base font-semibold leading-none">Notify</div>
-      </div>
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-        {navItems.filter((item) => isAdmin || !item.adminOnly).map((item) => {
-          const active = isActive(pathname, item.to)
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className={cn(
-                "flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors",
-                active
-                  ? "bg-primary text-primary-foreground shadow-sm shadow-primary/15"
-                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              )}
-            >
-              <item.icon className="size-4" />
-              <span>{item.label}</span>
-            </Link>
-          )
-        })}
+    <aside className="hidden border-r border-sidebar-border bg-sidebar/95 text-sidebar-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col">
+      <Link to="/dashboard" className="flex h-14 items-center gap-2.5 border-b border-sidebar-border px-5">
+        <NotifyMark className="size-5 text-primary" />
+        <span className="font-heading text-lg font-semibold lowercase tracking-wide">notify</span>
+      </Link>
+
+      <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-5">
+        {visibleNavGroups(isAdmin).map((group) => (
+          <div key={group.label}>
+            <div className="mb-1.5 flex items-center gap-2 px-2">
+              {group.channel && <span className={cn("size-1.5 rounded-[1px]", CHANNEL_DOTS[group.channel])} />}
+              <Eyebrow>{group.label}</Eyebrow>
+            </div>
+            <div className="space-y-px">
+              {group.items.map((item) => {
+                const active = isNavActive(pathname, item.to)
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "relative flex h-8 items-center gap-2.5 rounded-sm px-2 text-[13px] transition-colors",
+                      active
+                        ? "bg-sidebar-accent text-sidebar-accent-foreground before:absolute before:inset-y-1.5 before:-left-3 before:w-0.5 before:bg-primary"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    )}
+                  >
+                    <item.icon className={cn("size-3.5", active && "text-primary")} />
+                    <span>{item.label}</span>
+                  </Link>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
-      {environment && (
-        <div className="px-4 pb-4">
-          <Badge variant="secondary" className="w-full justify-center py-1 font-mono text-[11px]">
-            {environment}
-          </Badge>
+
+      <div className="space-y-1.5 border-t border-sidebar-border px-5 py-4 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            <SignalDot state={online === false ? "down" : online ? "live" : "idle"} pulse={online === true} />
+            {online === false ? "API offline" : online ? "API online" : "Connecting"}
+          </span>
+          {version && <span>{version}</span>}
         </div>
-      )}
+        {environment && <div>{environment}</div>}
+      </div>
     </aside>
   )
 }

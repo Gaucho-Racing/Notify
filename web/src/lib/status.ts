@@ -2,10 +2,10 @@ import { useQuery } from "@tanstack/react-query"
 
 import { api } from "@/lib/api"
 
-export type NotifyStatus = { version: string | null; env: string | null }
+export type NotifyStatus = { version: string | null; env: string | null; online: boolean | null }
 
 export function useNotifyStatus(): NotifyStatus {
-  const { data } = useQuery({
+  const { data, isError } = useQuery({
     queryKey: ["notify-status"],
     queryFn: async () => {
       const response = await api.get<{ message?: string; env?: string }>("/ping")
@@ -20,7 +20,8 @@ export function useNotifyStatus(): NotifyStatus {
     retry: 2,
   })
 
-  return data ?? { version: null, env: null }
+  if (data) return { ...data, online: !isError }
+  return { version: null, env: null, online: isError ? false : null }
 }
 
 export function envLabel(env: string | null) {

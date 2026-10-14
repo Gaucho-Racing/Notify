@@ -5,6 +5,7 @@ import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { PageContainer, PageHeader } from "@/components/PageContainer"
+import { ChannelTag } from "@/components/Telemetry"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,6 +32,7 @@ import {
   type DiscordBot,
   type DiscordBotInput,
 } from "@/lib/notify"
+import { cn } from "@/lib/utils"
 
 const DISCORD_BOTS_KEY = ["discordBots"]
 
@@ -55,6 +57,7 @@ export default function DiscordBotsPage() {
   return (
     <PageContainer>
       <PageHeader
+        eyebrow={<ChannelTag channel="DISCORD" />}
         title="Discord bots"
         description="Bots Notify can send Discord DMs through. Senders pick one with discord_bot_id, or get the default."
         action={
@@ -121,7 +124,7 @@ function DiscordBotRow({ bot, onEdit }: { bot: DiscordBot; onEdit: () => void })
   }
 
   return (
-    <Card>
+    <Card className={cn(!bot.enabled && "opacity-60")}>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Avatar size="lg">

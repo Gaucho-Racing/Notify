@@ -6,6 +6,7 @@ import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { PageContainer, PageHeader } from "@/components/PageContainer"
+import { ChannelTag, ChannelTile } from "@/components/Telemetry"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -36,6 +37,7 @@ import {
   type SMSSenderInput,
   type TwilioAccount,
 } from "@/lib/notify"
+import { cn } from "@/lib/utils"
 
 const SMS_SENDERS_KEY = ["smsSenders"]
 
@@ -65,6 +67,7 @@ export default function SMSSendersPage() {
   return (
     <PageContainer>
       <PageHeader
+        eyebrow={<ChannelTag channel="SMS" />}
         title="SMS senders"
         description="Numbers Notify can text from. Senders pick one with sms_sender_id, or get the default."
         action={
@@ -161,12 +164,12 @@ function SMSSenderRow({
   }
 
   return (
-    <Card>
+    <Card className={cn(!sender.enabled && "opacity-60")}>
       <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center">
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-            <MessageSquare className="size-5" />
-          </div>
+          <ChannelTile channel="SMS">
+              <MessageSquare className="size-4" />
+            </ChannelTile>
           <div className="min-w-0 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-medium">{sender.name}</span>

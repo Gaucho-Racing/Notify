@@ -5,6 +5,7 @@ import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/ConfirmDialog"
 import { PageContainer, PageHeader } from "@/components/PageContainer"
+import { ChannelTag, ChannelTile } from "@/components/Telemetry"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -32,6 +33,7 @@ import {
   type TwilioAccount,
   type TwilioAccountInput,
 } from "@/lib/notify"
+import { cn } from "@/lib/utils"
 
 export default function TwilioAccountsPage() {
   const { isAdmin, isLoading: authLoading } = useAuth()
@@ -54,6 +56,7 @@ export default function TwilioAccountsPage() {
   return (
     <PageContainer>
       <PageHeader
+        eyebrow={<ChannelTag channel="SMS" />}
         title="Twilio accounts"
         description="Twilio credentials Notify sends SMS through. Each SMS sender belongs to one account."
         action={
@@ -114,13 +117,13 @@ function TwilioAccountRow({ account, onEdit }: { account: TwilioAccount; onEdit:
   })
 
   return (
-    <Card>
+    <Card className={cn(!account.enabled && "opacity-60")}>
       <CardContent className="space-y-3">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
           <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-              <Phone className="size-5" />
-            </div>
+            <ChannelTile channel="SMS">
+              <Phone className="size-4" />
+            </ChannelTile>
             <div className="min-w-0 space-y-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{account.name}</span>

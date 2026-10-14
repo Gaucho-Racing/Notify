@@ -8,9 +8,9 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 export function AppShell() {
   return (
     <TooltipProvider>
-      <div className="grid min-h-svh bg-background text-foreground lg:grid-cols-[264px_minmax(0,1fr)]">
+      <div className="grid min-h-svh text-foreground lg:grid-cols-[232px_minmax(0,1fr)]">
         <AppSidebar />
-        <div className="flex min-h-svh min-w-0 flex-col bg-background">
+        <div className="flex min-h-svh min-w-0 flex-col">
           <AppHeader />
           <main className="flex-1">
             <Outlet />

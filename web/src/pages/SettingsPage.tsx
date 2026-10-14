@@ -1,54 +1,49 @@
-import { Moon, Sun } from "lucide-react"
-
 import { PageContainer, PageHeader } from "@/components/PageContainer"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Eyebrow } from "@/components/Telemetry"
+import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/lib/auth"
-import { useTheme } from "@/lib/theme"
 
 export default function SettingsPage() {
-  const { resolvedTheme, toggleTheme } = useTheme()
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
+  const name = user ? `${user.first_name} ${user.last_name}`.trim() || user.username : null
+
+  const rows = [
+    { label: "Name", value: name ?? "—" },
+    { label: "Email", value: user?.email ?? "—" },
+    { label: "Role", value: isAdmin ? "Notify admin" : "Member" },
+  ]
 
   return (
     <PageContainer>
-      <PageHeader title="Settings" description="Appearance and account details." />
+      <PageHeader eyebrow="System" title="Settings" description="Your account, as Sentinel reports it." />
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Appearance</CardTitle>
-            <CardDescription>Switch between light and dark mode.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button variant="outline" onClick={toggleTheme}>
-              {resolvedTheme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-              {resolvedTheme === "dark" ? "Light mode" : "Dark mode"}
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Account</CardTitle>
-            <CardDescription>Signed in through Sentinel.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            <p>
-              <span className="text-muted-foreground">Name: </span>
-              {user ? `${user.first_name} ${user.last_name}`.trim() : "—"}
-            </p>
-            <p>
-              <span className="text-muted-foreground">Email: </span>
-              {user?.email ?? "—"}
-            </p>
-            <p className="flex flex-wrap gap-1.5">
-              <span className="text-muted-foreground">Groups: </span>
-              {user?.groups?.length ? user.groups.join(", ") : "none"}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <section className="max-w-2xl overflow-hidden rounded-lg border border-border bg-card/90">
+        <div className="border-b border-border px-5 py-3">
+          <Eyebrow>Account · signed in through Sentinel</Eyebrow>
+        </div>
+        <dl className="divide-y divide-border text-sm">
+          {rows.map((row) => (
+            <div key={row.label} className="grid grid-cols-[96px_minmax(0,1fr)] gap-4 px-5 py-3">
+              <dt className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{row.label}</dt>
+              <dd className="break-words">{row.value}</dd>
+            </div>
+          ))}
+          <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-4 px-5 py-3">
+            <dt className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Groups</dt>
+            <dd className="flex flex-wrap gap-1.5">
+              {user?.groups?.length ? (
+                user.groups.map((group) => (
+                  <Badge key={group} variant={group === "NotifyAdmins" ? "default" : "outline"} className="normal-case tracking-normal">
+                    {group}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-muted-foreground">none</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+      </section>
     </PageContainer>
   )
 }
