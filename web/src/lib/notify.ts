@@ -88,3 +88,49 @@ export async function updateDiscordBot(id: string, input: DiscordBotInput) {
 export async function deleteDiscordBot(id: string) {
   await api.delete(`/discord-bots/${encodeURIComponent(id)}`)
 }
+
+export type EmailSender = {
+  id: string
+  name: string
+  description: string
+  from_name: string
+  from_address: string
+  reply_to: string
+  is_default: boolean
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type EmailSenderInput = Partial<{
+  name: string
+  description: string
+  from_name: string
+  from_address: string
+  reply_to: string
+  is_default: boolean
+  enabled: boolean
+}>
+
+export async function listEmailSenders() {
+  const response = await api.get<EmailSender[]>("/email-senders")
+  return response.data
+}
+
+export async function createEmailSender(input: EmailSenderInput) {
+  const response = await api.post<EmailSender>("/email-senders", input)
+  return response.data
+}
+
+export async function updateEmailSender(id: string, input: EmailSenderInput) {
+  const response = await api.patch<EmailSender>(`/email-senders/${encodeURIComponent(id)}`, input)
+  return response.data
+}
+
+export async function deleteEmailSender(id: string) {
+  await api.delete(`/email-senders/${encodeURIComponent(id)}`)
+}
+
+export function formatEmailFrom(sender: Pick<EmailSender, "from_name" | "from_address">) {
+  return sender.from_name ? `${sender.from_name} <${sender.from_address}>` : sender.from_address
+}

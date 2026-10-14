@@ -1,4 +1,4 @@
-import { Bell, Bot, LayoutDashboard, Settings } from "lucide-react"
+import { Bell, Bot, LayoutDashboard, Mail, Settings } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/email-senders", label: "Email senders", icon: Mail, adminOnly: true },
   { to: "/discord-bots", label: "Discord bots", icon: Bot, adminOnly: true },
   { to: "/settings", label: "Settings", icon: Settings },
 ]

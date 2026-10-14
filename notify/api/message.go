@@ -27,16 +27,17 @@ const (
 )
 
 type sendMessageRequest struct {
-	Recipients   model.MessageRecipients `json:"recipients"`
-	Channels     []model.Channel         `json:"channels"`
-	DiscordBotID string                  `json:"discord_bot_id"`
-	Subject      string                  `json:"subject"`
-	Body         string                  `json:"body"`
-	HTML         string                  `json:"html"`
-	ActionURL    string                  `json:"action_url"`
-	ActionLabel  string                  `json:"action_label"`
-	Category     string                  `json:"category"`
-	Metadata     map[string]any          `json:"metadata"`
+	Recipients    model.MessageRecipients `json:"recipients"`
+	Channels      []model.Channel         `json:"channels"`
+	DiscordBotID  string                  `json:"discord_bot_id"`
+	EmailSenderID string                  `json:"email_sender_id"`
+	Subject       string                  `json:"subject"`
+	Body          string                  `json:"body"`
+	HTML          string                  `json:"html"`
+	ActionURL     string                  `json:"action_url"`
+	ActionLabel   string                  `json:"action_label"`
+	Category      string                  `json:"category"`
+	Metadata      map[string]any          `json:"metadata"`
 }
 
 type messageDetail struct {
@@ -97,7 +98,8 @@ func SendMessage(c *gin.Context) {
 	if err != nil {
 		switch {
 		case errors.Is(err, service.ErrNoRecipients), errors.Is(err, service.ErrTooManyRecipients), errors.Is(err, service.ErrGroupNotFound),
-			errors.Is(err, service.ErrDiscordBotNotFound), errors.Is(err, service.ErrDiscordBotDisabled), errors.Is(err, service.ErrNoDefaultDiscordBot):
+			errors.Is(err, service.ErrDiscordBotNotFound), errors.Is(err, service.ErrDiscordBotDisabled), errors.Is(err, service.ErrNoDefaultDiscordBot),
+			errors.Is(err, service.ErrEmailSenderNotFound), errors.Is(err, service.ErrEmailSenderDisabled), errors.Is(err, service.ErrNoDefaultEmailSender):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, service.ErrDailyLimitExceeded):
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})
@@ -280,6 +282,10 @@ func validateSendRequest(req sendMessageRequest) (service.SendRequest, error) {
 	if discordBotID != "" && !slices.Contains(channels, model.ChannelDiscord) {
 		return service.SendRequest{}, errors.New("discord_bot_id requires DISCORD in channels")
 	}
+	emailSenderID := strings.TrimSpace(req.EmailSenderID)
+	if emailSenderID != "" && !slices.Contains(channels, model.ChannelEmail) {
+		return service.SendRequest{}, errors.New("email_sender_id requires EMAIL in channels")
+	}
 	if req.Recipients.EntityIDs == nil {
 		req.Recipients.EntityIDs = []string{}
 	}
@@ -301,15 +307,16 @@ func validateSendRequest(req sendMessageRequest) (service.SendRequest, error) {
 	}
 
 	return service.SendRequest{
-		Recipients:   req.Recipients,
-		Channels:     channels,
-		DiscordBotID: discordBotID,
-		Subject:      subject,
-		Body:         body,
-		HTML:         req.HTML,
-		ActionURL:    actionURL,
-		ActionLabel:  strings.TrimSpace(req.ActionLabel),
-		Category:     strings.TrimSpace(req.Category),
-		Metadata:     req.Metadata,
+		Recipients:    req.Recipients,
+		Channels:      channels,
+		DiscordBotID:  discordBotID,
+		EmailSenderID: emailSenderID,
+		Subject:       subject,
+		Body:          body,
+		HTML:          req.HTML,
+		ActionURL:     actionURL,
+		ActionLabel:   strings.TrimSpace(req.ActionLabel),
+		Category:      strings.TrimSpace(req.Category),
+		Metadata:      req.Metadata,
 	}, nil
 }

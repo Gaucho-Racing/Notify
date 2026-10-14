@@ -40,3 +40,14 @@ var senders = map[model.Channel]Sender{
 	model.ChannelEmail:   emailSender{},
 	model.ChannelDiscord: discordSender{},
 }
+
+// unavailableError marks a delivery whose bot or sender is gone or disabled.
+// Retrying cannot help until an admin intervenes, and a manual retry re-reads
+// the configuration anyway.
+type unavailableError struct {
+	error
+}
+
+func (unavailableError) Permanent() bool {
+	return true
+}

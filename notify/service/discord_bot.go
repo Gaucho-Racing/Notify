@@ -86,14 +86,14 @@ func CreateDiscordBot(ctx context.Context, input DiscordBotInput, actor Actor) (
 	}
 
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		if err := lockDiscordBots(tx); err != nil {
+		if err := lockSenderTable(tx, "notify_discord_bot"); err != nil {
 			return err
 		}
-		if err := ensureNameAvailable(tx, bot.Name, ""); err != nil {
+		if err := ensureSenderNameAvailable(tx, &model.DiscordBot{}, bot.Name, "", ErrDiscordBotNameTaken); err != nil {
 			return err
 		}
-		var defaults int64
-		if err := tx.Model(&model.DiscordBot{}).Where("is_default").Count(&defaults).Error; err != nil {
+		defaults, err := countDefaultSenders(tx, &model.DiscordBot{})
+		if err != nil {
 			return err
 		}
 		if defaults == 0 && bot.Enabled {
@@ -103,7 +103,7 @@ func CreateDiscordBot(ctx context.Context, input DiscordBotInput, actor Actor) (
 			return ErrDefaultDiscordBotHeld
 		}
 		if bot.IsDefault {
-			if err := clearDefaultDiscordBot(tx); err != nil {
+			if err := clearDefaultSender(tx, &model.DiscordBot{}); err != nil {
 				return err
 			}
 		}
@@ -126,7 +126,7 @@ func UpdateDiscordBot(ctx context.Context, id string, input DiscordBotInput, act
 
 	var bot model.DiscordBot
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		if err := lockDiscordBots(tx); err != nil {
+		if err := lockSenderTable(tx, "notify_discord_bot"); err != nil {
 			return err
 		}
 		var err error
@@ -137,7 +137,7 @@ func UpdateDiscordBot(ctx context.Context, id string, input DiscordBotInput, act
 		wasDefault := bot.IsDefault
 
 		if input.Name != nil {
-			if err := ensureNameAvailable(tx, *input.Name, bot.ID); err != nil {
+			if err := ensureSenderNameAvailable(tx, &model.DiscordBot{}, *input.Name, bot.ID, ErrDiscordBotNameTaken); err != nil {
 				return err
 			}
 			bot.Name = *input.Name
@@ -164,7 +164,7 @@ func UpdateDiscordBot(ctx context.Context, id string, input DiscordBotInput, act
 		bot.UpdatedByEntityID = actor.EntityID
 
 		if bot.IsDefault && !wasDefault {
-			if err := clearDefaultDiscordBot(tx); err != nil {
+			if err := clearDefaultSender(tx, &model.DiscordBot{}); err != nil {
 				return err
 			}
 		}
@@ -181,7 +181,7 @@ func UpdateDiscordBot(ctx context.Context, id string, input DiscordBotInput, act
 // Deliveries still queued for a deleted bot fail permanently.
 func DeleteDiscordBot(id string) error {
 	return database.DB.Transaction(func(tx *gorm.DB) error {
-		if err := lockDiscordBots(tx); err != nil {
+		if err := lockSenderTable(tx, "notify_discord_bot"); err != nil {
 			return err
 		}
 		bot, err := getDiscordBot(tx, id)
@@ -189,8 +189,8 @@ func DeleteDiscordBot(id string) error {
 			return err
 		}
 		if bot.IsDefault {
-			var others int64
-			if err := tx.Model(&model.DiscordBot{}).Where("id <> ?", id).Count(&others).Error; err != nil {
+			others, err := countOtherSenders(tx, &model.DiscordBot{}, id)
+			if err != nil {
 				return err
 			}
 			if others > 0 {
@@ -262,29 +262,4 @@ func applyDiscordToken(ctx context.Context, bot *model.DiscordBot, token string)
 	bot.TokenCiphertext = ciphertext
 	bot.TokenHint = token[len(token)-discordTokenHintLength:]
 	return nil
-}
-
-// lockDiscordBots serializes bot writes so the default-bot invariants are
-// checked against a stable view of the table.
-func lockDiscordBots(tx *gorm.DB) error {
-	return tx.Exec("SELECT pg_advisory_xact_lock(hashtext('notify_discord_bots'))").Error
-}
-
-func ensureNameAvailable(tx *gorm.DB, name string, excludeID string) error {
-	var count int64
-	query := tx.Model(&model.DiscordBot{}).Where("lower(name) = lower(?)", name)
-	if excludeID != "" {
-		query = query.Where("id <> ?", excludeID)
-	}
-	if err := query.Count(&count).Error; err != nil {
-		return err
-	}
-	if count > 0 {
-		return ErrDiscordBotNameTaken
-	}
-	return nil
-}
-
-func clearDefaultDiscordBot(tx *gorm.DB) error {
-	return tx.Model(&model.DiscordBot{}).Where("is_default").Update("is_default", false).Error
 }

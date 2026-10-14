@@ -24,9 +24,11 @@ type Message struct {
 	Category       string         `json:"category,omitempty" gorm:"index"`
 	Metadata       map[string]any `json:"metadata" gorm:"serializer:json;type:jsonb"`
 	Channels       []Channel      `json:"channels" gorm:"serializer:json;type:jsonb"`
-	// DiscordBotID is resolved at send time, falling back to the default bot,
-	// so retries go out through the same bot even if the default changes.
+	// DiscordBotID and EmailSenderID are resolved at send time, falling back
+	// to the defaults, so retries go out the same way even if a default
+	// changes.
 	DiscordBotID   string            `json:"discord_bot_id,omitempty" gorm:"index"`
+	EmailSenderID  string            `json:"email_sender_id,omitempty" gorm:"index"`
 	Recipients     MessageRecipients `json:"recipients" gorm:"serializer:json;type:jsonb"`
 	RecipientCount int               `json:"recipient_count"`
 	CreatedAt      time.Time         `json:"created_at" gorm:"autoCreateTime;index"`

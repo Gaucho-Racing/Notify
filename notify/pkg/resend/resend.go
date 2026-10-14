@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +30,18 @@ type Email struct {
 	Subject string   `json:"subject"`
 	Text    string   `json:"text,omitempty"`
 	HTML    string   `json:"html,omitempty"`
+	ReplyTo []string `json:"reply_to,omitempty"`
+}
+
+type Domain struct {
+	Name   string `json:"name"`
+	Status string `json:"status"`
+}
+
+// CanSend covers partially_verified too: Resend still sends from those
+// domains, just without a fallback sending server.
+func (d Domain) CanSend() bool {
+	return d.Status == "verified" || d.Status == "partially_verified"
 }
 
 type Error struct {
@@ -56,33 +70,89 @@ func (e Error) RetryAfterDuration() time.Duration {
 // return the original send instead of emailing the recipient twice; Resend
 // honors it for 24 hours.
 func Send(ctx context.Context, email Email, idempotencyKey string) (string, error) {
-	if strings.TrimSpace(config.ResendAPIKey) == "" {
-		return "", fmt.Errorf("RESEND_API_KEY is not configured")
+	headers := map[string]string{}
+	if idempotencyKey != "" {
+		headers["Idempotency-Key"] = idempotencyKey
 	}
-	body, err := json.Marshal(email)
-	if err != nil {
-		return "", fmt.Errorf("encode email: %w", err)
+	var sent struct {
+		ID string `json:"id"`
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/emails", bytes.NewReader(body))
-	if err != nil {
+	if err := call(ctx, http.MethodPost, "/emails", email, headers, &sent); err != nil {
 		return "", err
 	}
+	return sent.ID, nil
+}
+
+// ListDomains returns every domain on the account. A sending-only API key
+// cannot call this; Resend answers with a restricted_api_key error, which
+// IsRestrictedKey detects.
+func ListDomains(ctx context.Context) ([]Domain, error) {
+	domains := []Domain{}
+	after := ""
+	for {
+		path := "/domains?limit=100"
+		if after != "" {
+			path += "&after=" + url.QueryEscape(after)
+		}
+		var page struct {
+			HasMore bool `json:"has_more"`
+			Data    []struct {
+				ID string `json:"id"`
+				Domain
+			} `json:"data"`
+		}
+		if err := call(ctx, http.MethodGet, path, nil, nil, &page); err != nil {
+			return nil, err
+		}
+		for _, domain := range page.Data {
+			domains = append(domains, domain.Domain)
+		}
+		if !page.HasMore || len(page.Data) == 0 {
+			return domains, nil
+		}
+		after = page.Data[len(page.Data)-1].ID
+	}
+}
+
+func IsRestrictedKey(err error) bool {
+	var resendErr Error
+	return errors.As(err, &resendErr) && resendErr.Name == "restricted_api_key"
+}
+
+func call(ctx context.Context, method string, path string, payload interface{}, headers map[string]string, out interface{}) error {
+	if strings.TrimSpace(config.ResendAPIKey) == "" {
+		return fmt.Errorf("RESEND_API_KEY is not configured")
+	}
+	var body io.Reader
+	if payload != nil {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("encode resend request: %w", err)
+		}
+		body = bytes.NewReader(encoded)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, baseURL+path, body)
+	if err != nil {
+		return err
+	}
 	req.Header.Set("Authorization", "Bearer "+config.ResendAPIKey)
-	req.Header.Set("Content-Type", "application/json")
-	if idempotencyKey != "" {
-		req.Header.Set("Idempotency-Key", idempotencyKey)
+	if payload != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
 	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return err
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		resendErr := Error{StatusCode: resp.StatusCode}
@@ -92,14 +162,10 @@ func Send(ctx context.Context, email Email, idempotencyKey string) (string, erro
 		if seconds, err := strconv.Atoi(resp.Header.Get("Retry-After")); err == nil && seconds > 0 {
 			resendErr.RetryAfter = time.Duration(seconds) * time.Second
 		}
-		return "", resendErr
+		return resendErr
 	}
-
-	var sent struct {
-		ID string `json:"id"`
+	if err := json.Unmarshal(respBody, out); err != nil {
+		return fmt.Errorf("decode resend response: %w", err)
 	}
-	if err := json.Unmarshal(respBody, &sent); err != nil {
-		return "", fmt.Errorf("decode resend response: %w", err)
-	}
-	return sent.ID, nil
+	return nil
 }

@@ -82,6 +82,12 @@ func InitializeRoutes(router *gin.Engine) {
 	router.PATCH("/discord-bots/:botID", UpdateDiscordBot)
 	router.DELETE("/discord-bots/:botID", DeleteDiscordBot)
 
+	router.GET("/email-senders", ListEmailSenders)
+	router.POST("/email-senders", CreateEmailSender)
+	router.GET("/email-senders/:senderID", GetEmailSender)
+	router.PATCH("/email-senders/:senderID", UpdateEmailSender)
+	router.DELETE("/email-senders/:senderID", DeleteEmailSender)
+
 	router.POST("/messages", SendMessage)
 	router.GET("/messages", ListMessages)
 	router.GET("/messages/:messageID", GetMessage)

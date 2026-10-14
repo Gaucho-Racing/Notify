@@ -21,7 +21,6 @@ var SentinelRedirectURI = os.Getenv("SENTINEL_REDIRECT_URI")
 var SentinelSAToken = os.Getenv("SENTINEL_SA_TOKEN")
 
 var ResendAPIKey = os.Getenv("RESEND_API_KEY")
-var EmailFrom = os.Getenv("EMAIL_FROM")
 
 var EncryptionKey = os.Getenv("ENCRYPTION_KEY")
 

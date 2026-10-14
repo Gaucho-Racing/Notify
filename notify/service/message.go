@@ -27,16 +27,17 @@ var (
 )
 
 type SendRequest struct {
-	Recipients   model.MessageRecipients
-	Channels     []model.Channel
-	DiscordBotID string
-	Subject      string
-	Body         string
-	HTML         string
-	ActionURL    string
-	ActionLabel  string
-	Category     string
-	Metadata     map[string]any
+	Recipients    model.MessageRecipients
+	Channels      []model.Channel
+	DiscordBotID  string
+	EmailSenderID string
+	Subject       string
+	Body          string
+	HTML          string
+	ActionURL     string
+	ActionLabel   string
+	Category      string
+	Metadata      map[string]any
 }
 
 // SendMessage records a message and one PENDING delivery per recipient per
@@ -61,6 +62,14 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		}
 		discordBotID = bot.ID
 	}
+	emailSenderID := ""
+	if slices.Contains(req.Channels, model.ChannelEmail) {
+		sender, err := ResolveEmailSenderForSend(req.EmailSenderID)
+		if err != nil {
+			return model.Message{}, err
+		}
+		emailSenderID = sender.ID
+	}
 
 	message := model.Message{
 		ID:             ulid.Make().Prefixed("msg"),
@@ -76,6 +85,7 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		Metadata:       req.Metadata,
 		Channels:       req.Channels,
 		DiscordBotID:   discordBotID,
+		EmailSenderID:  emailSenderID,
 		Recipients:     req.Recipients,
 		RecipientCount: len(entityIDs),
 	}

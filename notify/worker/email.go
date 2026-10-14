@@ -3,13 +3,15 @@ package worker
 import (
 	"bytes"
 	"context"
+	"errors"
 	"html/template"
 	"strings"
 	"time"
 
-	"github.com/gaucho-racing/notify/notify/config"
+	"github.com/gaucho-racing/notify/notify/model"
 	"github.com/gaucho-racing/notify/notify/pkg/resend"
 	"github.com/gaucho-racing/notify/notify/pkg/sentinel"
+	"github.com/gaucho-racing/notify/notify/service"
 )
 
 type emailSender struct{}
@@ -39,13 +41,32 @@ func (emailSender) Send(ctx context.Context, outbound Outbound, destination stri
 		}
 		html = rendered
 	}
-	return resend.Send(ctx, resend.Email{
-		From:    config.EmailFrom,
+	sender, err := emailSenderFor(outbound.Message.EmailSenderID)
+	if err != nil {
+		return "", err
+	}
+	email := resend.Email{
+		From:    sender.From(),
 		To:      []string{destination},
 		Subject: outbound.Message.Subject,
 		Text:    emailText(outbound),
 		HTML:    html,
-	}, outbound.DeliveryID)
+	}
+	if sender.ReplyTo != "" {
+		email.ReplyTo = []string{sender.ReplyTo}
+	}
+	return resend.Send(ctx, email, outbound.DeliveryID)
+}
+
+func emailSenderFor(senderID string) (model.EmailSender, error) {
+	if senderID == "" {
+		return model.EmailSender{}, unavailableError{errors.New("message has no email sender assigned")}
+	}
+	sender, err := service.EmailSenderForDelivery(senderID)
+	if errors.Is(err, service.ErrEmailSenderNotFound) || errors.Is(err, service.ErrEmailSenderDisabled) {
+		return model.EmailSender{}, unavailableError{err}
+	}
+	return sender, err
 }
 
 func emailText(outbound Outbound) string {
