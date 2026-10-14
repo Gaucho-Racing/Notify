@@ -1,10 +1,9 @@
 import { Link, useLocation } from "react-router-dom"
 
 import { NotifyMark } from "@/components/NotifyMark"
-import { Eyebrow, SignalDot } from "@/components/Telemetry"
+import { Eyebrow } from "@/components/Telemetry"
 import { useAuth } from "@/lib/auth"
 import { isNavActive, visibleNavGroups } from "@/lib/nav"
-import { envLabel, useNotifyStatus } from "@/lib/status"
 import { cn } from "@/lib/utils"
 
 const CHANNEL_DOTS = {
@@ -15,9 +14,7 @@ const CHANNEL_DOTS = {
 
 export function AppSidebar() {
   const { pathname } = useLocation()
-  const { env, version, online } = useNotifyStatus()
   const { isAdmin } = useAuth()
-  const environment = envLabel(env)
 
   return (
     <aside className="hidden border-r border-sidebar-border bg-sidebar/95 text-sidebar-foreground lg:sticky lg:top-0 lg:flex lg:h-svh lg:flex-col">
@@ -57,16 +54,6 @@ export function AppSidebar() {
         ))}
       </nav>
 
-      <div className="space-y-1.5 border-t border-sidebar-border px-5 py-4 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-        <div className="flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <SignalDot state={online === false ? "down" : online ? "live" : "idle"} pulse={online === true} />
-            {online === false ? "API offline" : online ? "API online" : "Connecting"}
-          </span>
-          {version && <span>{version}</span>}
-        </div>
-        {environment && <div>{environment}</div>}
-      </div>
     </aside>
   )
 }
