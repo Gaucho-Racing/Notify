@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/gaucho-racing/notify/notify/config"
 )
 
 // The official SDK flattens every non-429 failure into a bare string error,
@@ -56,10 +54,24 @@ func (e Error) Error() string {
 }
 
 // Permanent reports whether retrying cannot succeed for this recipient. Only
-// request validation failures qualify; auth, domain, and quota errors are
+// request validation failures qualify; key, domain, and quota errors are
 // deployment problems that resolve once an operator fixes them.
 func (e Error) Permanent() bool {
+	if e.isKeyError() {
+		return false
+	}
 	return e.StatusCode == http.StatusUnprocessableEntity || e.StatusCode == http.StatusBadRequest
+}
+
+// isKeyError recognizes a rejected API key. Resend documents 403
+// invalid_api_key, but in practice answers an unknown key with a 400
+// validation_error whose message names the key, so both are matched.
+func (e Error) isKeyError() bool {
+	switch e.Name {
+	case "invalid_api_key", "suspended_api_key", "missing_api_key", "restricted_api_key":
+		return true
+	}
+	return e.StatusCode == http.StatusBadRequest && strings.Contains(strings.ToLower(e.Message), "api key")
 }
 
 func (e Error) RetryAfterDuration() time.Duration {
@@ -69,7 +81,7 @@ func (e Error) RetryAfterDuration() time.Duration {
 // Send delivers one email. idempotencyKey makes a retry after a lost response
 // return the original send instead of emailing the recipient twice; Resend
 // honors it for 24 hours.
-func Send(ctx context.Context, email Email, idempotencyKey string) (string, error) {
+func Send(ctx context.Context, apiKey string, email Email, idempotencyKey string) (string, error) {
 	headers := map[string]string{}
 	if idempotencyKey != "" {
 		headers["Idempotency-Key"] = idempotencyKey
@@ -77,7 +89,7 @@ func Send(ctx context.Context, email Email, idempotencyKey string) (string, erro
 	var sent struct {
 		ID string `json:"id"`
 	}
-	if err := call(ctx, http.MethodPost, "/emails", email, headers, &sent); err != nil {
+	if err := call(ctx, apiKey, http.MethodPost, "/emails", email, headers, &sent); err != nil {
 		return "", err
 	}
 	return sent.ID, nil
@@ -86,7 +98,7 @@ func Send(ctx context.Context, email Email, idempotencyKey string) (string, erro
 // ListDomains returns every domain on the account. A sending-only API key
 // cannot call this; Resend answers with a restricted_api_key error, which
 // IsRestrictedKey detects.
-func ListDomains(ctx context.Context) ([]Domain, error) {
+func ListDomains(ctx context.Context, apiKey string) ([]Domain, error) {
 	domains := []Domain{}
 	after := ""
 	for {
@@ -101,7 +113,7 @@ func ListDomains(ctx context.Context) ([]Domain, error) {
 				Domain
 			} `json:"data"`
 		}
-		if err := call(ctx, http.MethodGet, path, nil, nil, &page); err != nil {
+		if err := call(ctx, apiKey, http.MethodGet, path, nil, nil, &page); err != nil {
 			return nil, err
 		}
 		for _, domain := range page.Data {
@@ -119,9 +131,16 @@ func IsRestrictedKey(err error) bool {
 	return errors.As(err, &resendErr) && resendErr.Name == "restricted_api_key"
 }
 
-func call(ctx context.Context, method string, path string, payload interface{}, headers map[string]string, out interface{}) error {
-	if strings.TrimSpace(config.ResendAPIKey) == "" {
-		return fmt.Errorf("RESEND_API_KEY is not configured")
+// IsInvalidKey covers keys Resend does not accept at all: unknown, revoked,
+// or suspended.
+func IsInvalidKey(err error) bool {
+	var resendErr Error
+	return errors.As(err, &resendErr) && resendErr.isKeyError() && resendErr.Name != "restricted_api_key"
+}
+
+func call(ctx context.Context, apiKey string, method string, path string, payload interface{}, headers map[string]string, out interface{}) error {
+	if strings.TrimSpace(apiKey) == "" {
+		return fmt.Errorf("resend api key is empty")
 	}
 	var body io.Reader
 	if payload != nil {
@@ -136,7 +155,7 @@ func call(ctx context.Context, method string, path string, payload interface{}, 
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+config.ResendAPIKey)
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

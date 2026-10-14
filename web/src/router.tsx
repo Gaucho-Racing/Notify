@@ -5,6 +5,7 @@ import { RequireAuth } from "@/components/RequireAuth"
 import DashboardPage from "@/pages/DashboardPage"
 import DiscordBotsPage from "@/pages/DiscordBotsPage"
 import EmailSendersPage from "@/pages/EmailSendersPage"
+import ResendAccountsPage from "@/pages/ResendAccountsPage"
 import LoginPage from "@/pages/LoginPage"
 import NotFoundPage from "@/pages/NotFoundPage"
 import SettingsPage from "@/pages/SettingsPage"
@@ -19,6 +20,7 @@ export const router = createBrowserRouter([
           { path: "/", element: <Navigate to="/dashboard" replace /> },
           { path: "/dashboard", element: <DashboardPage /> },
           { path: "/email-senders", element: <EmailSendersPage /> },
+          { path: "/resend-accounts", element: <ResendAccountsPage /> },
           { path: "/discord-bots", element: <DiscordBotsPage /> },
           { path: "/settings", element: <SettingsPage /> },
         ],

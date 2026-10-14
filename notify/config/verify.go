@@ -52,11 +52,8 @@ func Verify() {
 	if SentinelSAToken == "" {
 		logger.SugarLogger.Warnf("SENTINEL_SA_TOKEN is not set, recipients cannot be resolved and every delivery will fail")
 	}
-	if ResendAPIKey == "" {
-		logger.SugarLogger.Warnf("RESEND_API_KEY is not set, email deliveries will fail")
-	}
 	if EncryptionKey == "" {
-		logger.SugarLogger.Warnf("ENCRYPTION_KEY is not set, discord bots cannot be configured and discord deliveries will fail")
+		logger.SugarLogger.Warnf("ENCRYPTION_KEY is not set, Discord bots and Resend accounts cannot be configured, so no deliveries can be sent")
 	} else {
 		box, err := secretbox.New(EncryptionKey)
 		if err != nil {

@@ -7,6 +7,7 @@ import (
 	"net/mail"
 	"strings"
 
+	"github.com/gaucho-racing/notify/notify/pkg/secretbox"
 	"github.com/gaucho-racing/notify/notify/service"
 	"github.com/gin-gonic/gin"
 )
@@ -18,13 +19,14 @@ const (
 )
 
 type emailSenderRequest struct {
-	Name        *string `json:"name"`
-	Description *string `json:"description"`
-	FromName    *string `json:"from_name"`
-	FromAddress *string `json:"from_address"`
-	ReplyTo     *string `json:"reply_to"`
-	IsDefault   *bool   `json:"is_default"`
-	Enabled     *bool   `json:"enabled"`
+	Name            *string `json:"name"`
+	Description     *string `json:"description"`
+	ResendAccountID *string `json:"resend_account_id"`
+	FromName        *string `json:"from_name"`
+	FromAddress     *string `json:"from_address"`
+	ReplyTo         *string `json:"reply_to"`
+	IsDefault       *bool   `json:"is_default"`
+	Enabled         *bool   `json:"enabled"`
 }
 
 // emailSenderSummary is what applications see: enough to pick a sender by
@@ -88,8 +90,8 @@ func CreateEmailSender(c *gin.Context) {
 	if !ok {
 		return
 	}
-	if input.Name == nil || input.FromAddress == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name and from_address are required"})
+	if input.Name == nil || input.FromAddress == nil || input.ResendAccountID == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name, from_address, and resend_account_id are required"})
 		return
 	}
 	sender, err := service.CreateEmailSender(c.Request.Context(), input, requestActor(c))
@@ -151,6 +153,13 @@ func bindEmailSenderRequest(c *gin.Context) (service.EmailSenderInput, bool) {
 		}
 		input.Description = &description
 	}
+	if req.ResendAccountID != nil {
+		accountID := strings.TrimSpace(*req.ResendAccountID)
+		if accountID == "" {
+			return fail("resend_account_id must not be empty")
+		}
+		input.ResendAccountID = &accountID
+	}
 	if req.FromName != nil {
 		fromName := strings.TrimSpace(*req.FromName)
 		if len([]rune(fromName)) > maxEmailFromNameLength || strings.ContainsAny(fromName, "\r\n") {
@@ -197,8 +206,10 @@ func respondEmailSenderError(c *gin.Context, err error) {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 	case errors.Is(err, service.ErrEmailSenderNameTaken), errors.Is(err, service.ErrDefaultEmailSenderHeld):
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
-	case errors.Is(err, service.ErrEmailDomainNotVerified):
+	case errors.Is(err, service.ErrEmailDomainNotVerified), errors.Is(err, service.ErrResendAccountNotFound):
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	case errors.Is(err, secretbox.ErrNotConfigured):
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": err.Error()})
 	case errors.Is(err, service.ErrResendUnreachable):
 		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
 	default:

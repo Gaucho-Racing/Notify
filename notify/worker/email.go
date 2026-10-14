@@ -41,7 +41,7 @@ func (emailSender) Send(ctx context.Context, outbound Outbound, destination stri
 		}
 		html = rendered
 	}
-	sender, err := emailSenderFor(outbound.Message.EmailSenderID)
+	sender, apiKey, err := emailSenderFor(outbound.Message.EmailSenderID)
 	if err != nil {
 		return "", err
 	}
@@ -55,18 +55,19 @@ func (emailSender) Send(ctx context.Context, outbound Outbound, destination stri
 	if sender.ReplyTo != "" {
 		email.ReplyTo = []string{sender.ReplyTo}
 	}
-	return resend.Send(ctx, email, outbound.DeliveryID)
+	return resend.Send(ctx, apiKey, email, outbound.DeliveryID)
 }
 
-func emailSenderFor(senderID string) (model.EmailSender, error) {
+func emailSenderFor(senderID string) (model.EmailSender, string, error) {
 	if senderID == "" {
-		return model.EmailSender{}, unavailableError{errors.New("message has no email sender assigned")}
+		return model.EmailSender{}, "", unavailableError{errors.New("message has no email sender assigned")}
 	}
-	sender, err := service.EmailSenderForDelivery(senderID)
-	if errors.Is(err, service.ErrEmailSenderNotFound) || errors.Is(err, service.ErrEmailSenderDisabled) {
-		return model.EmailSender{}, unavailableError{err}
+	sender, apiKey, err := service.EmailSenderForDelivery(senderID)
+	if errors.Is(err, service.ErrEmailSenderNotFound) || errors.Is(err, service.ErrEmailSenderDisabled) ||
+		errors.Is(err, service.ErrResendAccountNotFound) || errors.Is(err, service.ErrResendAccountDisabled) {
+		return model.EmailSender{}, "", unavailableError{err}
 	}
-	return sender, err
+	return sender, apiKey, err
 }
 
 func emailText(outbound Outbound) string {

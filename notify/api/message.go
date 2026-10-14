@@ -99,7 +99,8 @@ func SendMessage(c *gin.Context) {
 		switch {
 		case errors.Is(err, service.ErrNoRecipients), errors.Is(err, service.ErrTooManyRecipients), errors.Is(err, service.ErrGroupNotFound),
 			errors.Is(err, service.ErrDiscordBotNotFound), errors.Is(err, service.ErrDiscordBotDisabled), errors.Is(err, service.ErrNoDefaultDiscordBot),
-			errors.Is(err, service.ErrEmailSenderNotFound), errors.Is(err, service.ErrEmailSenderDisabled), errors.Is(err, service.ErrNoDefaultEmailSender):
+			errors.Is(err, service.ErrEmailSenderNotFound), errors.Is(err, service.ErrEmailSenderDisabled), errors.Is(err, service.ErrNoDefaultEmailSender),
+			errors.Is(err, service.ErrResendAccountNotFound), errors.Is(err, service.ErrResendAccountDisabled):
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		case errors.Is(err, service.ErrDailyLimitExceeded):
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": err.Error()})

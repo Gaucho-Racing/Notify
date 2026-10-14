@@ -93,6 +93,7 @@ export type EmailSender = {
   id: string
   name: string
   description: string
+  resend_account_id: string
   from_name: string
   from_address: string
   reply_to: string
@@ -105,6 +106,7 @@ export type EmailSender = {
 export type EmailSenderInput = Partial<{
   name: string
   description: string
+  resend_account_id: string
   from_name: string
   from_address: string
   reply_to: string
@@ -133,4 +135,54 @@ export async function deleteEmailSender(id: string) {
 
 export function formatEmailFrom(sender: Pick<EmailSender, "from_name" | "from_address">) {
   return sender.from_name ? `${sender.from_name} <${sender.from_address}>` : sender.from_address
+}
+
+export const RESEND_ACCOUNTS_KEY = ["resendAccounts"]
+
+export type ResendAccount = {
+  id: string
+  name: string
+  description: string
+  key_hint: string
+  full_access: boolean
+  enabled: boolean
+  sender_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type ResendAccountInput = Partial<{
+  name: string
+  description: string
+  api_key: string
+  enabled: boolean
+}>
+
+export type ResendDomain = {
+  name: string
+  status: string
+}
+
+export async function listResendAccounts() {
+  const response = await api.get<ResendAccount[]>("/resend-accounts")
+  return response.data
+}
+
+export async function listResendAccountDomains(id: string) {
+  const response = await api.get<ResendDomain[]>(`/resend-accounts/${encodeURIComponent(id)}/domains`)
+  return response.data
+}
+
+export async function createResendAccount(input: ResendAccountInput) {
+  const response = await api.post<ResendAccount>("/resend-accounts", input)
+  return response.data
+}
+
+export async function updateResendAccount(id: string, input: ResendAccountInput) {
+  const response = await api.patch<ResendAccount>(`/resend-accounts/${encodeURIComponent(id)}`, input)
+  return response.data
+}
+
+export async function deleteResendAccount(id: string) {
+  await api.delete(`/resend-accounts/${encodeURIComponent(id)}`)
 }

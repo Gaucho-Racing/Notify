@@ -82,6 +82,13 @@ func InitializeRoutes(router *gin.Engine) {
 	router.PATCH("/discord-bots/:botID", UpdateDiscordBot)
 	router.DELETE("/discord-bots/:botID", DeleteDiscordBot)
 
+	router.GET("/resend-accounts", ListResendAccounts)
+	router.POST("/resend-accounts", CreateResendAccount)
+	router.GET("/resend-accounts/:accountID", GetResendAccount)
+	router.GET("/resend-accounts/:accountID/domains", ListResendAccountDomains)
+	router.PATCH("/resend-accounts/:accountID", UpdateResendAccount)
+	router.DELETE("/resend-accounts/:accountID", DeleteResendAccount)
+
 	router.GET("/email-senders", ListEmailSenders)
 	router.POST("/email-senders", CreateEmailSender)
 	router.GET("/email-senders/:senderID", GetEmailSender)

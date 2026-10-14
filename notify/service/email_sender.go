@@ -9,7 +9,6 @@ import (
 	"github.com/gaucho-racing/notify/notify/database"
 	"github.com/gaucho-racing/notify/notify/model"
 	"github.com/gaucho-racing/notify/notify/pkg/logger"
-	"github.com/gaucho-racing/notify/notify/pkg/resend"
 	ulid "github.com/gaucho-racing/ulid-go"
 	"gorm.io/gorm"
 )
@@ -21,17 +20,18 @@ var (
 	ErrNoDefaultEmailSender   = errors.New("no default email sender is configured; pass email_sender_id or ask a Notify admin to set a default")
 	ErrDefaultEmailSenderHeld = errors.New("the default email sender cannot be disabled or deleted; make another sender the default first")
 	ErrEmailDomainNotVerified = errors.New("the from address's domain is not verified in Resend")
-	ErrResendUnreachable      = errors.New("could not check verified domains with Resend")
+	ErrResendUnreachable      = errors.New("could not reach Resend")
 )
 
 type EmailSenderInput struct {
-	Name        *string
-	Description *string
-	FromName    *string
-	FromAddress *string
-	ReplyTo     *string
-	IsDefault   *bool
-	Enabled     *bool
+	Name            *string
+	Description     *string
+	ResendAccountID *string
+	FromName        *string
+	FromAddress     *string
+	ReplyTo         *string
+	IsDefault       *bool
+	Enabled         *bool
 }
 
 func ListEmailSenders() ([]model.EmailSender, error) {
@@ -60,10 +60,10 @@ func getEmailSender(db *gorm.DB, id string) (model.EmailSender, error) {
 // CreateEmailSender checks the from domain against Resend before storing the
 // sender. The first sender created becomes the default.
 func CreateEmailSender(ctx context.Context, input EmailSenderInput, actor Actor) (model.EmailSender, error) {
-	if input.Name == nil || input.FromAddress == nil {
-		return model.EmailSender{}, errors.New("name and from_address are required")
+	if input.Name == nil || input.FromAddress == nil || input.ResendAccountID == nil {
+		return model.EmailSender{}, errors.New("name, from_address, and resend_account_id are required")
 	}
-	if err := ensureDomainVerified(ctx, *input.FromAddress); err != nil {
+	if err := ensureDomainVerified(ctx, *input.ResendAccountID, *input.FromAddress); err != nil {
 		return model.EmailSender{}, err
 	}
 	sender := model.EmailSender{
@@ -105,8 +105,13 @@ func CreateEmailSender(ctx context.Context, input EmailSenderInput, actor Actor)
 }
 
 func UpdateEmailSender(ctx context.Context, id string, input EmailSenderInput, actor Actor) (model.EmailSender, error) {
-	if input.FromAddress != nil {
-		if err := ensureDomainVerified(ctx, *input.FromAddress); err != nil {
+	if input.FromAddress != nil || input.ResendAccountID != nil {
+		current, err := GetEmailSender(id)
+		if err != nil {
+			return model.EmailSender{}, err
+		}
+		applyEmailSenderInput(&current, input)
+		if err := ensureDomainVerified(ctx, current.ResendAccountID, current.FromAddress); err != nil {
 			return model.EmailSender{}, err
 		}
 	}
@@ -191,20 +196,31 @@ func ResolveEmailSenderForSend(id string) (model.EmailSender, error) {
 	if !sender.Enabled {
 		return model.EmailSender{}, ErrEmailSenderDisabled
 	}
-	return sender, nil
-}
-
-// EmailSenderForDelivery re-checks Enabled so disabling a sender stops its
-// queued deliveries too.
-func EmailSenderForDelivery(id string) (model.EmailSender, error) {
-	sender, err := GetEmailSender(id)
+	account, err := GetResendAccount(sender.ResendAccountID)
 	if err != nil {
 		return model.EmailSender{}, err
 	}
-	if !sender.Enabled {
-		return model.EmailSender{}, ErrEmailSenderDisabled
+	if !account.Enabled {
+		return model.EmailSender{}, ErrResendAccountDisabled
 	}
 	return sender, nil
+}
+
+// EmailSenderForDelivery returns the sender and its account's API key. It
+// re-checks both Enabled flags so disabling either stops queued deliveries.
+func EmailSenderForDelivery(id string) (model.EmailSender, string, error) {
+	sender, err := GetEmailSender(id)
+	if err != nil {
+		return model.EmailSender{}, "", err
+	}
+	if !sender.Enabled {
+		return model.EmailSender{}, "", ErrEmailSenderDisabled
+	}
+	apiKey, err := ResendAccountKey(sender.ResendAccountID)
+	if err != nil {
+		return model.EmailSender{}, "", err
+	}
+	return sender, apiKey, nil
 }
 
 func applyEmailSenderInput(sender *model.EmailSender, input EmailSenderInput) {
@@ -213,6 +229,9 @@ func applyEmailSenderInput(sender *model.EmailSender, input EmailSenderInput) {
 	}
 	if input.Description != nil {
 		sender.Description = *input.Description
+	}
+	if input.ResendAccountID != nil {
+		sender.ResendAccountID = *input.ResendAccountID
 	}
 	if input.FromName != nil {
 		sender.FromName = *input.FromName
@@ -233,19 +252,19 @@ func applyEmailSenderInput(sender *model.EmailSender, input EmailSenderInput) {
 
 // ensureDomainVerified requires an exact match: Resend treats a subdomain as
 // its own domain, so notify.example.com being verified does not cover
-// example.com. A sending-only API key cannot list domains, in which case the
+// example.com. A sending-only key cannot list domains, in which case the
 // check is skipped and Resend rejects a bad domain at send time instead.
-func ensureDomainVerified(ctx context.Context, address string) error {
+func ensureDomainVerified(ctx context.Context, accountID string, address string) error {
 	_, domain, _ := strings.Cut(address, "@")
 	domain = strings.ToLower(domain)
 
-	domains, err := resend.ListDomains(ctx)
+	domains, err := ListResendAccountDomains(ctx, accountID)
 	if err != nil {
-		if resend.IsRestrictedKey(err) {
-			logger.SugarLogger.Warnf("RESEND_API_KEY is sending-only, so %s was not checked against verified domains", domain)
+		if errors.Is(err, ErrResendKeySendingOnly) {
+			logger.SugarLogger.Warnf("resend account %s has a sending-only key, so %s was not checked against verified domains", accountID, domain)
 			return nil
 		}
-		return fmt.Errorf("%w: %v", ErrResendUnreachable, err)
+		return err
 	}
 	verified := []string{}
 	for _, candidate := range domains {
@@ -258,7 +277,7 @@ func ensureDomainVerified(ctx context.Context, address string) error {
 		verified = append(verified, candidate.Name)
 	}
 	if len(verified) == 0 {
-		return fmt.Errorf("%w: %s (no domains are verified yet)", ErrEmailDomainNotVerified, domain)
+		return fmt.Errorf("%w: %s (no domains are verified on this account yet)", ErrEmailDomainNotVerified, domain)
 	}
-	return fmt.Errorf("%w: %s (verified: %s)", ErrEmailDomainNotVerified, domain, strings.Join(verified, ", "))
+	return fmt.Errorf("%w: %s (verified on this account: %s)", ErrEmailDomainNotVerified, domain, strings.Join(verified, ", "))
 }

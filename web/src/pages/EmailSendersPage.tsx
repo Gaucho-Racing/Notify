@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Copy, CornerUpLeft, Mail, Pencil, Plus, Star, Trash2 } from "lucide-react"
+import { Copy, CornerUpLeft, KeyRound, Mail, Pencil, Plus, Star, Trash2 } from "lucide-react"
 import { useState, type FormEvent } from "react"
+import { Link } from "react-router-dom"
 import { toast } from "sonner"
 
 import { ConfirmDialog } from "@/components/ConfirmDialog"
@@ -18,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { apiErrorMessage } from "@/lib/api"
@@ -27,9 +29,12 @@ import {
   deleteEmailSender,
   formatEmailFrom,
   listEmailSenders,
+  listResendAccounts,
+  RESEND_ACCOUNTS_KEY,
   updateEmailSender,
   type EmailSender,
   type EmailSenderInput,
+  type ResendAccount,
 } from "@/lib/notify"
 
 const EMAIL_SENDERS_KEY = ["emailSenders"]
@@ -40,6 +45,11 @@ export default function EmailSendersPage() {
   const { data: senders, isLoading, error } = useQuery({
     queryKey: EMAIL_SENDERS_KEY,
     queryFn: listEmailSenders,
+    enabled: isAdmin,
+  })
+  const { data: accounts } = useQuery({
+    queryKey: RESEND_ACCOUNTS_KEY,
+    queryFn: listResendAccounts,
     enabled: isAdmin,
   })
 
@@ -71,6 +81,16 @@ export default function EmailSendersPage() {
         </div>
       )}
 
+      {accounts?.length === 0 && (
+        <div className="mb-4 rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm">
+          Senders need a Resend account to send through.{" "}
+          <Link to="/resend-accounts" className="font-medium text-primary underline-offset-4 hover:underline">
+            Add a Resend account
+          </Link>{" "}
+          first.
+        </div>
+      )}
+
       <div className="space-y-3">
         {(isLoading || authLoading) && <Skeleton className="h-24 w-full" />}
         {senders?.length === 0 && (
@@ -81,13 +101,19 @@ export default function EmailSendersPage() {
           </Card>
         )}
         {senders?.map((sender) => (
-          <EmailSenderRow key={sender.id} sender={sender} onEdit={() => setEditing(sender)} />
+          <EmailSenderRow
+            key={sender.id}
+            sender={sender}
+            account={accounts?.find((account) => account.id === sender.resend_account_id)}
+            onEdit={() => setEditing(sender)}
+          />
         ))}
       </div>
 
       <EmailSenderDialog
         key={editing === "new" ? "new" : editing?.id ?? "closed"}
         sender={editing === "new" ? null : editing}
+        accounts={accounts ?? []}
         open={editing !== null}
         onClose={() => setEditing(null)}
       />
@@ -95,9 +121,21 @@ export default function EmailSendersPage() {
   )
 }
 
-function EmailSenderRow({ sender, onEdit }: { sender: EmailSender; onEdit: () => void }) {
+function EmailSenderRow({
+  sender,
+  account,
+  onEdit,
+}: {
+  sender: EmailSender
+  account?: ResendAccount
+  onEdit: () => void
+}) {
   const queryClient = useQueryClient()
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: EMAIL_SENDERS_KEY })
+  const invalidate = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: EMAIL_SENDERS_KEY }),
+      queryClient.invalidateQueries({ queryKey: RESEND_ACCOUNTS_KEY }),
+    ])
 
   const update = useMutation({
     mutationFn: (input: EmailSenderInput) => updateEmailSender(sender.id, input),
@@ -137,6 +175,11 @@ function EmailSenderRow({ sender, onEdit }: { sender: EmailSender; onEdit: () =>
             </div>
             <div className="break-all text-sm">{formatEmailFrom(sender)}</div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <KeyRound className="size-3" />
+                {account?.name ?? "unknown account"}
+                {account && !account.enabled && " (disabled)"}
+              </span>
               {sender.reply_to && (
                 <span className="inline-flex items-center gap-1 break-all">
                   <CornerUpLeft className="size-3" />
@@ -189,9 +232,20 @@ function EmailSenderRow({ sender, onEdit }: { sender: EmailSender; onEdit: () =>
   )
 }
 
-function EmailSenderDialog({ sender, open, onClose }: { sender: EmailSender | null; open: boolean; onClose: () => void }) {
+function EmailSenderDialog({
+  sender,
+  accounts,
+  open,
+  onClose,
+}: {
+  sender: EmailSender | null
+  accounts: ResendAccount[]
+  open: boolean
+  onClose: () => void
+}) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(sender?.name ?? "")
+  const [accountID, setAccountID] = useState(sender?.resend_account_id ?? (accounts.length === 1 ? accounts[0].id : ""))
   const [description, setDescription] = useState(sender?.description ?? "")
   const [fromName, setFromName] = useState(sender?.from_name ?? "")
   const [fromAddress, setFromAddress] = useState(sender?.from_address ?? "")
@@ -202,6 +256,7 @@ function EmailSenderDialog({ sender, open, onClose }: { sender: EmailSender | nu
       const input: EmailSenderInput = {
         name,
         description,
+        resend_account_id: accountID,
         from_name: fromName,
         from_address: fromAddress.trim(),
         reply_to: replyTo.trim(),
@@ -210,7 +265,10 @@ function EmailSenderDialog({ sender, open, onClose }: { sender: EmailSender | nu
     },
     onSuccess: async (saved) => {
       toast.success(sender ? `Updated ${saved.name}` : `Added ${saved.name}`)
-      await queryClient.invalidateQueries({ queryKey: EMAIL_SENDERS_KEY })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: EMAIL_SENDERS_KEY }),
+        queryClient.invalidateQueries({ queryKey: RESEND_ACCOUNTS_KEY }),
+      ])
       onClose()
     },
     onError: (error) => toast.error(apiErrorMessage(error, "Failed to save sender.")),
@@ -218,6 +276,10 @@ function EmailSenderDialog({ sender, open, onClose }: { sender: EmailSender | nu
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
+    if (!accountID) {
+      toast.error("Choose a Resend account.")
+      return
+    }
     save.mutate()
   }
 
@@ -228,13 +290,29 @@ function EmailSenderDialog({ sender, open, onClose }: { sender: EmailSender | nu
           <DialogHeader>
             <DialogTitle>{sender ? `Edit ${sender.name}` : "Add email sender"}</DialogTitle>
             <DialogDescription>
-              The from address must be on a domain verified in Resend, matched exactly (a subdomain counts as its own
-              domain). Set a reply-to if the from domain doesn't receive mail.
+              The from address must be on a domain verified in the chosen Resend account, matched exactly (a subdomain
+              counts as its own domain). Set a reply-to if the from domain doesn't receive mail.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="sender-name">Name</Label>
             <Input id="sender-name" value={name} onChange={(event) => setName(event.target.value)} maxLength={64} required />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="sender-account">Resend account</Label>
+            <Select value={accountID} onValueChange={setAccountID}>
+              <SelectTrigger id="sender-account" className="w-full">
+                <SelectValue placeholder="Choose an account" />
+              </SelectTrigger>
+              <SelectContent>
+                {accounts.map((account) => (
+                  <SelectItem key={account.id} value={account.id}>
+                    {account.name}
+                    {!account.enabled && " (disabled)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

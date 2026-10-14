@@ -38,6 +38,7 @@ func Init() {
 		&model.Delivery{},
 		&model.DiscordBot{},
 		&model.EmailSender{},
+		&model.ResendAccount{},
 	); err != nil {
 		logger.SugarLogger.Fatalf("failed to run database migrations: %v", err)
 		return

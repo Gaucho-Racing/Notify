@@ -5,13 +5,15 @@ import (
 	"time"
 )
 
-// EmailSender is a From identity Notify can send email as. FromAddress must
-// be on a domain verified in Resend; ReplyTo routes replies somewhere that
+// EmailSender is a From identity Notify can send email as, through one
+// Resend account. FromAddress must be on a domain verified in that account;
+// ReplyTo routes replies somewhere that
 // actually receives mail, since the sending subdomain usually does not.
 type EmailSender struct {
 	ID                string    `json:"id" gorm:"primaryKey"`
 	Name              string    `json:"name" gorm:"uniqueIndex"`
 	Description       string    `json:"description"`
+	ResendAccountID   string    `json:"resend_account_id" gorm:"index"`
 	FromName          string    `json:"from_name"`
 	FromAddress       string    `json:"from_address"`
 	ReplyTo           string    `json:"reply_to"`
