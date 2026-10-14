@@ -4,6 +4,16 @@
   --font-brand: "Chakra Petch", sans-serif;
 }
 
+@utility bg-brand {
+  background-image: linear-gradient(110deg, var(--gr-purple), var(--gr-pink));
+}
+
+@utility text-brand {
+  background-image: linear-gradient(110deg, #a259ff, var(--gr-pink));
+  background-clip: text;
+  color: transparent;
+}
+
 @layer base {
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {

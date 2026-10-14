@@ -29,7 +29,7 @@ export function AppFooter() {
               target="_blank"
               rel="noreferrer"
               aria-label={label}
-              className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-primary"
+              className="flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <Icon className="size-4" />
             </a>
