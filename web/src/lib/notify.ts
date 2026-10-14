@@ -329,17 +329,23 @@ export type Delivery = {
   created_at: string
 }
 
+export type DiscordEmbed = {
+  title?: string
+  description?: string
+  url?: string
+  color?: number
+  footer?: { text: string }
+}
+
 export type SendMessageInput = {
   recipients: { entity_ids: string[]; group_ids: string[] }
   channels: Channel[]
-  email_sender_id?: string
-  sms_sender_id?: string
-  discord_bot_id?: string
-  subject: string
+  subject?: string
   body: string
-  action_url?: string
-  action_label?: string
   category?: string
+  email?: { sender_id?: string; html?: string }
+  sms?: { sender_id?: string }
+  discord?: { bot_id?: string; embeds?: DiscordEmbed[] }
 }
 
 export type Message = {

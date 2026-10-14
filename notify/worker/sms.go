@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/gaucho-racing/notify/notify/model"
 	"github.com/gaucho-racing/notify/notify/pkg/sentinel"
@@ -39,7 +38,7 @@ func (smsSender) Send(ctx context.Context, outbound Outbound, destination string
 		To:                  destination,
 		From:                sender.FromNumber,
 		MessagingServiceSID: sender.MessagingServiceSID,
-		Body:                smsBody(outbound),
+		Body:                outbound.Message.Body,
 	})
 }
 
@@ -53,16 +52,4 @@ func smsSenderFor(senderID string) (model.SMSSender, twilio.Credentials, error) 
 		return model.SMSSender{}, twilio.Credentials{}, unavailableError{err}
 	}
 	return sender, creds, err
-}
-
-func smsBody(outbound Outbound) string {
-	text := outbound.Message.Subject + "\n\n" + outbound.Message.Body
-	if outbound.ApplicationName != "" {
-		text = outbound.ApplicationName + ": " + text
-	}
-	suffix := ""
-	if outbound.Message.ActionURL != "" {
-		suffix = "\n\n" + actionLabel(outbound.Message.ActionLabel) + ": " + outbound.Message.ActionURL
-	}
-	return twilio.TruncateBody(strings.TrimSpace(text), suffix)
 }

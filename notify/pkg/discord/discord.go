@@ -17,12 +17,10 @@ const baseURL = "https://discord.com/api/v10"
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 const (
-	codeUnknownUser          = 10013
-	codeCannotMessageUser    = 50007
-	codeInvalidFormBody      = 50035
-	codeInvalidRecipient     = 50033
-	maxEmbedTitleLength      = 256
-	maxEmbedDescriptionChars = 4096
+	codeUnknownUser       = 10013
+	codeCannotMessageUser = 50007
+	codeInvalidFormBody   = 50035
+	codeInvalidRecipient  = 50033
 )
 
 type Embed struct {
@@ -30,11 +28,33 @@ type Embed struct {
 	Description string       `json:"description,omitempty"`
 	URL         string       `json:"url,omitempty"`
 	Color       int          `json:"color,omitempty"`
+	Timestamp   string       `json:"timestamp,omitempty"`
+	Author      *EmbedAuthor `json:"author,omitempty"`
 	Footer      *EmbedFooter `json:"footer,omitempty"`
+	Image       *EmbedMedia  `json:"image,omitempty"`
+	Thumbnail   *EmbedMedia  `json:"thumbnail,omitempty"`
+	Fields      []EmbedField `json:"fields,omitempty"`
+}
+
+type EmbedAuthor struct {
+	Name    string `json:"name"`
+	URL     string `json:"url,omitempty"`
+	IconURL string `json:"icon_url,omitempty"`
 }
 
 type EmbedFooter struct {
-	Text string `json:"text"`
+	Text    string `json:"text"`
+	IconURL string `json:"icon_url,omitempty"`
+}
+
+type EmbedMedia struct {
+	URL string `json:"url"`
+}
+
+type EmbedField struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Inline bool   `json:"inline,omitempty"`
 }
 
 type Message struct {
@@ -107,22 +127,6 @@ func GetCurrentUser(ctx context.Context, token string) (User, error) {
 	var user User
 	err := call(ctx, token, http.MethodGet, "/users/@me", nil, &user)
 	return user, err
-}
-
-func TruncateTitle(title string) string {
-	return truncate(title, maxEmbedTitleLength)
-}
-
-func TruncateDescription(description string) string {
-	return truncate(description, maxEmbedDescriptionChars)
-}
-
-func truncate(value string, limit int) string {
-	runes := []rune(value)
-	if len(runes) <= limit {
-		return value
-	}
-	return string(runes[:limit-1]) + "…"
 }
 
 func call(ctx context.Context, token string, method string, path string, payload interface{}, out interface{}) error {

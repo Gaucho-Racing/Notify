@@ -162,10 +162,9 @@ func process(delivery model.Delivery, message model.Message) {
 	masked := sender.MaskDestination(destination)
 
 	providerMessageID, err := sender.Send(ctx, Outbound{
-		DeliveryID:      delivery.ID,
-		Message:         message,
-		Contact:         contact,
-		ApplicationName: applicationName(message.ClientID),
+		DeliveryID: delivery.ID,
+		Message:    message,
+		Contact:    contact,
 	}, destination)
 	if err != nil {
 		var permanent permanentError
@@ -217,12 +216,4 @@ func finish(delivery model.Delivery, outcome service.DeliveryOutcome) {
 		}
 		logger.SugarLogger.Errorf("failed to record outcome for delivery %s: %v", delivery.ID, err)
 	}
-}
-
-func applicationName(clientID string) string {
-	applications, err := service.ResolveApplications([]string{clientID})
-	if err != nil || len(applications) == 0 {
-		return ""
-	}
-	return applications[0].Name
 }

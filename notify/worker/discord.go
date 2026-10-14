@@ -9,8 +9,6 @@ import (
 	"github.com/gaucho-racing/notify/notify/service"
 )
 
-const embedColor = 0x18181b
-
 type discordSender struct{}
 
 func (discordSender) Provider() string {
@@ -28,20 +26,15 @@ func (discordSender) MaskDestination(destination string) string {
 }
 
 func (discordSender) Send(ctx context.Context, outbound Outbound, destination string) (string, error) {
-	embed := discord.Embed{
-		Title:       discord.TruncateTitle(outbound.Message.Subject),
-		Description: discord.TruncateDescription(discordBody(outbound)),
-		URL:         outbound.Message.ActionURL,
-		Color:       embedColor,
-	}
-	if outbound.ApplicationName != "" {
-		embed.Footer = &discord.EmbedFooter{Text: "Sent by " + outbound.ApplicationName + " via Notify"}
-	}
 	token, err := botToken(outbound.Message.DiscordBotID)
 	if err != nil {
 		return "", err
 	}
-	return discord.SendDirectMessage(ctx, token, destination, discord.Message{Embeds: []discord.Embed{embed}})
+	message := discord.Message{Content: outbound.Message.Body}
+	if len(outbound.Message.DiscordEmbeds) > 0 {
+		message = discord.Message{Embeds: outbound.Message.DiscordEmbeds}
+	}
+	return discord.SendDirectMessage(ctx, token, destination, message)
 }
 
 func botToken(botID string) (string, error) {
@@ -53,12 +46,4 @@ func botToken(botID string) (string, error) {
 		return "", unavailableError{err}
 	}
 	return token, err
-}
-
-func discordBody(outbound Outbound) string {
-	body := outbound.Message.Body
-	if outbound.Message.ActionURL != "" {
-		body += "\n\n[" + actionLabel(outbound.Message.ActionLabel) + "](" + outbound.Message.ActionURL + ")"
-	}
-	return body
 }

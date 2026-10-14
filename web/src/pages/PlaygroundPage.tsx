@@ -1,6 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { Copy, Search, Send, UserRound, Users, X } from "lucide-react"
-import { useMemo, useState, type FormEvent, type ReactNode } from "react"
+import { Copy, FileUp, Search, Send, UserRound, Users, X } from "lucide-react"
+import { useMemo, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react"
 import { toast } from "sonner"
 
 import { IdentityDisplay } from "@/components/IdentityDisplay"
@@ -25,6 +25,7 @@ import {
   sendMessage,
   type Channel,
   type DeliveryStatus,
+  type DiscordEmbed,
   type SendMessageInput,
 } from "@/lib/notify"
 import { cn } from "@/lib/utils"
@@ -32,14 +33,14 @@ import { cn } from "@/lib/utils"
 const DEFAULT_SENDER = "__default"
 const MAX_SEARCH_RESULTS = 6
 const POLL_INTERVAL_MS = 2000
+const SMS_MAX_LENGTH = 1600
+const DISCORD_MAX_CONTENT = 2000
+const EMAIL_HTML_MAX_BYTES = 100_000
+const DEFAULT_EMBED_COLOR = "#e105a3"
 
 type SenderOption = { id: string; name: string; detail: string; isDefault: boolean; enabled: boolean }
 
-const SENDER_LABELS: Record<Channel, string> = {
-  EMAIL: "Email sender",
-  SMS: "SMS sender",
-  DISCORD: "Discord bot",
-}
+type EmbedDraft = { title: string; description: string; url: string; color: string; footer: string }
 const CHANNEL_ORDER: Channel[] = ["EMAIL", "SMS", "DISCORD"]
 
 const STATUS_SIGNAL: Record<DeliveryStatus, "live" | "down" | "warn" | "idle"> = {
@@ -58,9 +59,11 @@ export default function PlaygroundPage() {
   const [senders, setSenders] = useState<Record<Channel, string>>({ EMAIL: DEFAULT_SENDER, SMS: DEFAULT_SENDER, DISCORD: DEFAULT_SENDER })
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
-  const [actionURL, setActionURL] = useState("")
-  const [actionLabel, setActionLabel] = useState("")
   const [category, setCategory] = useState("playground")
+  const [emailFormat, setEmailFormat] = useState<"plain" | "html">("plain")
+  const [emailHTML, setEmailHTML] = useState("")
+  const [discordFormat, setDiscordFormat] = useState<"plain" | "rich">("plain")
+  const [embed, setEmbed] = useState<EmbedDraft>({ title: "", description: "", url: "", color: DEFAULT_EMBED_COLOR, footer: "" })
   const [messageID, setMessageID] = useState<string | null>(null)
 
   const users = useQuery({ queryKey: ["sentinelUsers"], queryFn: listUsers, enabled: isAdmin, staleTime: 5 * 60 * 1000 })
@@ -92,24 +95,34 @@ export default function PlaygroundPage() {
       enabled: bot.enabled,
     })),
   }
+  const selectedBotID = senders.DISCORD === DEFAULT_SENDER ? discordBots.data?.find((bot) => bot.is_default)?.id : senders.DISCORD
+  const selectedBot = discordBots.data?.find((bot) => bot.id === selectedBotID)
+
+  const has = (channel: Channel) => channels.includes(channel)
+  const trimmedBody = body.trim()
+  const richEmbed = useMemo(() => embedFromDraft(embed), [embed])
 
   const payload = useMemo<SendMessageInput>(() => {
+    const ordered = CHANNEL_ORDER.filter((channel) => channels.includes(channel))
+    const chosen = (channel: Channel) => (senders[channel] !== DEFAULT_SENDER ? senders[channel] : undefined)
     const input: SendMessageInput = {
       recipients: { entity_ids: entityIDs, group_ids: groupIDs },
-      channels: CHANNEL_ORDER.filter((channel) => channels.includes(channel)),
-      subject: subject.trim(),
+      channels: ordered,
+      subject: subject.trim() || undefined,
       body: body.trim(),
+      category: category.trim() || undefined,
     }
-    const chosenSender = (channel: Channel) =>
-      input.channels.includes(channel) && senders[channel] !== DEFAULT_SENDER ? senders[channel] : undefined
-    input.email_sender_id = chosenSender("EMAIL")
-    input.sms_sender_id = chosenSender("SMS")
-    input.discord_bot_id = chosenSender("DISCORD")
-    if (actionURL.trim()) input.action_url = actionURL.trim()
-    if (actionLabel.trim()) input.action_label = actionLabel.trim()
-    if (category.trim()) input.category = category.trim()
+    if (ordered.includes("EMAIL")) {
+      const html = emailFormat === "html" ? emailHTML.trim() : ""
+      if (chosen("EMAIL") || html) input.email = { sender_id: chosen("EMAIL"), html: html || undefined }
+    }
+    if (ordered.includes("SMS") && chosen("SMS")) input.sms = { sender_id: chosen("SMS") }
+    if (ordered.includes("DISCORD")) {
+      const embeds = discordFormat === "rich" && richEmbed ? [richEmbed] : undefined
+      if (chosen("DISCORD") || embeds) input.discord = { bot_id: chosen("DISCORD"), embeds }
+    }
     return input
-  }, [entityIDs, groupIDs, channels, senders, subject, body, actionURL, actionLabel, category])
+  }, [entityIDs, groupIDs, channels, senders, subject, body, category, emailFormat, emailHTML, discordFormat, richEmbed])
 
   const send = useMutation({
     mutationFn: () => sendMessage(payload),
@@ -129,8 +142,21 @@ export default function PlaygroundPage() {
     )
   }
 
-  const recipientCount = entityIDs.length + groupIDs.length
-  const canSend = recipientCount > 0 && channels.length > 0 && payload.subject !== "" && payload.body !== "" && !send.isPending
+  const smsLength = trimmedBody.length
+  const discordLength = [...trimmedBody].length
+  const htmlBytes = new TextEncoder().encode(emailHTML).length
+  const problems = [
+    entityIDs.length + groupIDs.length === 0 && "Add at least one recipient.",
+    channels.length === 0 && "Pick at least one channel.",
+    trimmedBody === "" && "Write a body.",
+    has("EMAIL") && subject.trim() === "" && "Email needs a subject.",
+    has("EMAIL") && emailFormat === "html" && emailHTML.trim() === "" && "Paste or load the email HTML.",
+    has("EMAIL") && emailFormat === "html" && htmlBytes > EMAIL_HTML_MAX_BYTES && "Email HTML is over 100 KB.",
+    has("SMS") && smsLength > SMS_MAX_LENGTH && `Body is over SMS's ${SMS_MAX_LENGTH}-character limit.`,
+    has("DISCORD") && discordFormat === "plain" && discordLength > DISCORD_MAX_CONTENT && `Body is over Discord's ${DISCORD_MAX_CONTENT}-character limit; use rich.`,
+    has("DISCORD") && discordFormat === "rich" && !richEmbed && "Give the Discord embed a title or description.",
+  ].filter((problem): problem is string => typeof problem === "string")
+  const canSend = problems.length === 0 && !send.isPending
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -140,6 +166,22 @@ export default function PlaygroundPage() {
   function toggleChannel(channel: Channel) {
     setChannels((current) => (current.includes(channel) ? current.filter((value) => value !== channel) : [...current, channel]))
   }
+
+  function changeDiscordFormat(format: "plain" | "rich") {
+    setDiscordFormat(format)
+    if (format === "rich" && !embed.title && !embed.description) {
+      setEmbed((current) => ({ ...current, title: subject.trim(), description: body.trim() }))
+    }
+  }
+
+  const senderSelect = (channel: Channel, label: string) => (
+    <SenderSelect
+      label={label}
+      value={senders[channel]}
+      options={senderOptions[channel]}
+      onChange={(value) => setSenders((current) => ({ ...current, [channel]: value }))}
+    />
+  )
 
   return (
     <PageContainer>
@@ -189,82 +231,27 @@ export default function PlaygroundPage() {
             </div>
           </Panel>
 
-          <Panel label="02 · Channels">
-            <div className="grid gap-2 sm:grid-cols-3">
-              {CHANNEL_ORDER.map((channel) => {
-                const active = channels.includes(channel)
-                return (
-                  <button
-                    key={channel}
-                    type="button"
-                    onClick={() => toggleChannel(channel)}
-                    className={cn(
-                      "flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition-colors",
-                      active ? "border-primary/50 bg-accent" : "border-border hover:border-border hover:bg-muted/50",
-                    )}
-                  >
-                    <ChannelTag channel={channel} />
-                    <span className={cn("size-3 rounded-[2px] border", active ? "border-primary bg-primary" : "border-muted-foreground/40")} />
-                  </button>
-                )
-              })}
-            </div>
-            {channels.length > 0 && (
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                {CHANNEL_ORDER.filter((channel) => channels.includes(channel)).map((channel) => {
-                  const options = senderOptions[channel]
-                  const fallback = options.find((option) => option.isDefault)
-                  return (
-                    <div key={channel} className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">{SENDER_LABELS[channel]}</Label>
-                      <Select value={senders[channel]} onValueChange={(value) => setSenders((current) => ({ ...current, [channel]: value }))}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={DEFAULT_SENDER}>Default{fallback ? ` · ${fallback.name}` : " (none set)"}</SelectItem>
-                          {options
-                            .filter((option) => option.enabled)
-                            .map((option) => (
-                              <SelectItem key={option.id} value={option.id}>
-                                {option.name} · {option.detail}
-                              </SelectItem>
-                            ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </Panel>
-
-          <Panel label="03 · Message">
+          <Panel label="02 · Message">
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label htmlFor="pg-subject" className="text-xs text-muted-foreground">Subject</Label>
+                <Label htmlFor="pg-subject" className="text-xs text-muted-foreground">
+                  Subject <span className="font-mono text-[10px]">· email only</span>
+                </Label>
                 <Input id="pg-subject" value={subject} onChange={(event) => setSubject(event.target.value)} maxLength={200} placeholder="Track day moved to Saturday" />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="pg-body" className="text-xs text-muted-foreground">Body</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="pg-body" className="text-xs text-muted-foreground">Body</Label>
+                  <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{discordLength.toLocaleString()} chars</span>
+                </div>
                 <Textarea
                   id="pg-body"
                   value={body}
                   onChange={(event) => setBody(event.target.value)}
                   maxLength={10000}
                   rows={6}
-                  placeholder={"Blank lines start new paragraphs in email.\nSMS joins it into one text."}
+                  placeholder="Sent as-is: the email text, the SMS, and the Discord message."
                 />
-              </div>
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_140px]">
-                <div className="space-y-1.5">
-                  <Label htmlFor="pg-action-url" className="text-xs text-muted-foreground">Action URL</Label>
-                  <Input id="pg-action-url" type="url" value={actionURL} onChange={(event) => setActionURL(event.target.value)} placeholder="https://" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="pg-action-label" className="text-xs text-muted-foreground">Action label</Label>
-                  <Input id="pg-action-label" value={actionLabel} onChange={(event) => setActionLabel(event.target.value)} maxLength={40} placeholder="Open" />
-                </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="pg-category" className="text-xs text-muted-foreground">Category</Label>
@@ -273,10 +260,70 @@ export default function PlaygroundPage() {
             </div>
           </Panel>
 
+          <Panel label="03 · Channels">
+            <div className="grid gap-2 sm:grid-cols-3">
+              {CHANNEL_ORDER.map((channel) => {
+                const active = has(channel)
+                return (
+                  <button
+                    key={channel}
+                    type="button"
+                    onClick={() => toggleChannel(channel)}
+                    className={cn(
+                      "flex items-center justify-between rounded-md border px-3 py-2.5 text-left transition-colors",
+                      active ? "border-primary/50 bg-accent" : "border-border hover:bg-muted/50",
+                    )}
+                  >
+                    <ChannelTag channel={channel} />
+                    <span className={cn("size-3 rounded-[2px] border", active ? "border-primary bg-primary" : "border-muted-foreground/40")} />
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {has("EMAIL") && (
+                <ChannelOptions channel="EMAIL">
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    {senderSelect("EMAIL", "Sender")}
+                    <Segmented
+                      value={emailFormat}
+                      options={[["plain", "Plain"], ["html", "HTML"]]}
+                      onChange={(value) => setEmailFormat(value as "plain" | "html")}
+                    />
+                  </div>
+                  {emailFormat === "html" && <HTMLInput value={emailHTML} bytes={htmlBytes} onChange={setEmailHTML} />}
+                </ChannelOptions>
+              )}
+              {has("SMS") && (
+                <ChannelOptions channel="SMS">
+                  {senderSelect("SMS", "Sender")}
+                  <Meter label="Body" value={smsLength} max={SMS_MAX_LENGTH} />
+                </ChannelOptions>
+              )}
+              {has("DISCORD") && (
+                <ChannelOptions channel="DISCORD">
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                    {senderSelect("DISCORD", "Bot")}
+                    <Segmented
+                      value={discordFormat}
+                      options={[["plain", "Plain"], ["rich", "Rich"]]}
+                      onChange={(value) => changeDiscordFormat(value as "plain" | "rich")}
+                    />
+                  </div>
+                  {discordFormat === "plain" ? (
+                    <Meter label="Body" value={discordLength} max={DISCORD_MAX_CONTENT} />
+                  ) : (
+                    <EmbedBuilder embed={embed} onChange={setEmbed} />
+                  )}
+                </ChannelOptions>
+              )}
+            </div>
+          </Panel>
+
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-              {entityIDs.length} {entityIDs.length === 1 ? "person" : "people"} · {groupIDs.length} {groupIDs.length === 1 ? "group" : "groups"} ·{" "}
-              {channels.length} {channels.length === 1 ? "channel" : "channels"}
+            <span className={cn("font-mono text-[11px] tracking-[0.06em]", problems.length ? "text-muted-foreground" : "text-primary")}>
+              {problems[0] ?? "Ready to send."}
             </span>
             <Button type="submit" disabled={!canSend}>
               <Send className="size-4" />
@@ -286,12 +333,35 @@ export default function PlaygroundPage() {
         </form>
 
         <div className="space-y-4 lg:sticky lg:top-20 lg:self-start">
-          {messageID ? <TransmissionLog messageID={messageID} onClear={() => setMessageID(null)} /> : <Preview subject={subject} body={body} actionURL={actionURL} actionLabel={actionLabel} channels={channels} />}
+          {messageID ? (
+            <TransmissionLog messageID={messageID} onClear={() => setMessageID(null)} />
+          ) : (
+            <Preview
+              channels={CHANNEL_ORDER.filter(has)}
+              subject={subject}
+              body={body}
+              emailHTML={emailFormat === "html" ? emailHTML : ""}
+              discordEmbed={discordFormat === "rich" ? richEmbed : null}
+              botName={selectedBot?.name ?? "Notify"}
+              botAvatar={selectedBot?.avatar_url}
+            />
+          )}
           <RequestPanel payload={payload} />
         </div>
       </div>
     </PageContainer>
   )
+}
+
+function embedFromDraft(draft: EmbedDraft): DiscordEmbed | null {
+  const embed: DiscordEmbed = {}
+  if (draft.title.trim()) embed.title = draft.title.trim()
+  if (draft.description.trim()) embed.description = draft.description.trim()
+  if (!embed.title && !embed.description) return null
+  if (draft.url.trim()) embed.url = draft.url.trim()
+  embed.color = parseInt(draft.color.slice(1), 16)
+  if (draft.footer.trim()) embed.footer = { text: draft.footer.trim() }
+  return embed
 }
 
 function Panel({ label, action, children }: { label: string; action?: ReactNode; children: ReactNode }) {
@@ -303,6 +373,161 @@ function Panel({ label, action, children }: { label: string; action?: ReactNode;
       </div>
       <div className="p-5">{children}</div>
     </section>
+  )
+}
+
+function ChannelOptions({ channel, children }: { channel: Channel; children: ReactNode }) {
+  return (
+    <div className="space-y-3 rounded-md border border-border bg-background/40 p-4">
+      <ChannelTag channel={channel} />
+      {children}
+    </div>
+  )
+}
+
+function SenderSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value: string
+  options: SenderOption[]
+  onChange: (value: string) => void
+}) {
+  const fallback = options.find((option) => option.isDefault)
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-muted-foreground">{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={DEFAULT_SENDER}>Default{fallback ? ` · ${fallback.name}` : " (none set)"}</SelectItem>
+          {options
+            .filter((option) => option.enabled)
+            .map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.name} · {option.detail}
+              </SelectItem>
+            ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+function Segmented({ value, options, onChange }: { value: string; options: [string, string][]; onChange: (value: string) => void }) {
+  return (
+    <div className="inline-flex h-8 rounded-md border border-border bg-card/60 p-0.5 font-mono text-[11px]">
+      {options.map(([option, label]) => (
+        <button
+          key={option}
+          type="button"
+          onClick={() => onChange(option)}
+          className={cn(
+            "rounded-sm px-3 uppercase tracking-[0.1em] transition-colors",
+            value === option ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Meter({ label, value, max }: { label: string; value: number; max: number }) {
+  const over = value > max
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+        <span>{label}</span>
+        <span className={cn("tabular-nums", over && "text-status-failed")}>
+          {value.toLocaleString()} / {max.toLocaleString()}
+        </span>
+      </div>
+      <div className="h-1 overflow-hidden rounded-full bg-muted">
+        <div className={cn("h-full", over ? "bg-status-failed" : "bg-primary")} style={{ width: `${Math.min(value / max, 1) * 100}%` }} />
+      </div>
+    </div>
+  )
+}
+
+function HTMLInput({ value, bytes, onChange }: { value: string; bytes: number; onChange: (value: string) => void }) {
+  const fileInput = useRef<HTMLInputElement>(null)
+
+  async function loadFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) return
+    if (file.size > EMAIL_HTML_MAX_BYTES) {
+      toast.error("That file is over 100 KB.")
+      return
+    }
+    onChange(await file.text())
+    toast.success(`Loaded ${file.name}`)
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <Label htmlFor="pg-html" className="text-xs text-muted-foreground">HTML</Label>
+        <div className="flex items-center gap-3">
+          <span className={cn("font-mono text-[10px] tabular-nums text-muted-foreground", bytes > EMAIL_HTML_MAX_BYTES && "text-status-failed")}>
+            {(bytes / 1000).toFixed(1)} / 100 KB
+          </span>
+          <Button type="button" variant="outline" size="sm" onClick={() => fileInput.current?.click()}>
+            <FileUp className="size-3.5" />
+            Load .html
+          </Button>
+          <input ref={fileInput} type="file" accept=".html,.htm,text/html" className="hidden" onChange={loadFile} />
+        </div>
+      </div>
+      <Textarea
+        id="pg-html"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        rows={8}
+        className="font-mono text-xs"
+        placeholder="<!doctype html>…  The body above is still sent as the plain-text version."
+      />
+    </div>
+  )
+}
+
+function EmbedBuilder({ embed, onChange }: { embed: EmbedDraft; onChange: (embed: EmbedDraft) => void }) {
+  const set = (field: keyof EmbedDraft) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    onChange({ ...embed, [field]: event.target.value })
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_88px]">
+        <div className="space-y-1.5">
+          <Label htmlFor="pg-embed-title" className="text-xs text-muted-foreground">Title</Label>
+          <Input id="pg-embed-title" value={embed.title} onChange={set("title")} maxLength={256} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="pg-embed-color" className="text-xs text-muted-foreground">Color</Label>
+          <Input id="pg-embed-color" type="color" value={embed.color} onChange={set("color")} className="p-1" />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="pg-embed-description" className="text-xs text-muted-foreground">Description</Label>
+        <Textarea id="pg-embed-description" value={embed.description} onChange={set("description")} maxLength={4096} rows={4} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="pg-embed-url" className="text-xs text-muted-foreground">Title link</Label>
+          <Input id="pg-embed-url" type="url" value={embed.url} onChange={set("url")} placeholder="https://" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="pg-embed-footer" className="text-xs text-muted-foreground">Footer</Label>
+          <Input id="pg-embed-footer" value={embed.footer} onChange={set("footer")} maxLength={2048} />
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -392,20 +617,22 @@ function RecipientPicker({
 }
 
 function Preview({
+  channels,
   subject,
   body,
-  actionURL,
-  actionLabel,
-  channels,
+  emailHTML,
+  discordEmbed,
+  botName,
+  botAvatar,
 }: {
+  channels: Channel[]
   subject: string
   body: string
-  actionURL: string
-  actionLabel: string
-  channels: Channel[]
+  emailHTML: string
+  discordEmbed: DiscordEmbed | null
+  botName: string
+  botAvatar?: string
 }) {
-  const label = actionLabel.trim() || "Open"
-  const shownSubject = subject.trim() || "Subject"
   const shownBody = body.trim() || "Your message body shows up here."
 
   return (
@@ -415,43 +642,53 @@ function Preview({
         {channels.includes("EMAIL") && (
           <div className="space-y-2">
             <ChannelTag channel="EMAIL" />
-            <div className="rounded-md bg-[#f4f4f5] p-4 text-[#18181b]">
-              <div className="rounded-md bg-white p-5">
-                <div className="mb-3 text-base font-semibold">{shownSubject}</div>
-                {shownBody.split(/\n\s*\n/).map((paragraph, index) => (
-                  <p key={index} className="mb-2 text-sm leading-relaxed whitespace-pre-line text-[#3f3f46]">{paragraph}</p>
-                ))}
-                {actionURL.trim() && <span className="mt-2 inline-block rounded-md bg-[#18181b] px-3.5 py-2 text-xs font-semibold text-white">{label}</span>}
-              </div>
+            <div className="overflow-hidden rounded-md bg-white text-[#18181b]">
+              <div className="border-b border-[#e4e4e7] px-4 py-2.5 text-sm font-semibold">{subject.trim() || "No subject"}</div>
+              {emailHTML.trim() ? (
+                <iframe title="Email HTML preview" sandbox="" srcDoc={emailHTML} className="h-80 w-full bg-white" />
+              ) : (
+                <p className="px-4 py-3 text-sm whitespace-pre-wrap">{shownBody}</p>
+              )}
             </div>
           </div>
         )}
         {channels.includes("SMS") && (
           <div className="space-y-2">
             <ChannelTag channel="SMS" />
-            <div className="flex justify-start">
-              <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-[#26262b] px-3.5 py-2.5 text-sm whitespace-pre-line text-[#f4f4f5]">
-                {`Notify: ${shownSubject}\n\n${shownBody}${actionURL.trim() ? `\n\n${label}: ${actionURL.trim()}` : ""}`}
-              </div>
+            <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-[#26262b] px-3.5 py-2.5 text-sm whitespace-pre-wrap text-[#f4f4f5]">
+              {shownBody}
             </div>
           </div>
         )}
         {channels.includes("DISCORD") && (
           <div className="space-y-2">
             <ChannelTag channel="DISCORD" />
-            <div className="rounded-md bg-[#313338] p-3">
-              <div className="rounded-sm border-l-4 border-[#18181b] bg-[#2b2d31] px-3.5 py-3">
-                <div className={cn("mb-1 text-sm font-semibold", actionURL.trim() ? "text-[#00a8fc]" : "text-[#f2f3f5]")}>{shownSubject}</div>
-                <div className="text-sm whitespace-pre-line text-[#dbdee1]">
-                  {shownBody}
-                  {actionURL.trim() && (
-                    <>
-                      {"\n\n"}
-                      <span className="text-[#00a8fc]">{label}</span>
-                    </>
-                  )}
+            <div className="flex gap-3 rounded-md bg-[#313338] p-3 text-[#dbdee1]">
+              <Avatar>
+                {botAvatar && <AvatarImage src={botAvatar} alt="" />}
+                <AvatarFallback>{botName.slice(0, 1).toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex items-center gap-1.5">
+                  <span className="text-sm font-medium text-[#f2f3f5]">{botName}</span>
+                  <span className="rounded-[3px] bg-[#5865f2] px-1 text-[10px] font-semibold text-white">APP</span>
                 </div>
-                <div className="mt-2 text-[11px] text-[#949ba4]">Sent by Notify</div>
+                {discordEmbed ? (
+                  <div
+                    className="max-w-md rounded-sm border-l-4 bg-[#2b2d31] px-3.5 py-3"
+                    style={{ borderColor: `#${(discordEmbed.color ?? 0).toString(16).padStart(6, "0")}` }}
+                  >
+                    {discordEmbed.title && (
+                      <div className={cn("mb-1 text-sm font-semibold", discordEmbed.url ? "text-[#00a8fc]" : "text-[#f2f3f5]")}>
+                        {discordEmbed.title}
+                      </div>
+                    )}
+                    {discordEmbed.description && <div className="text-sm whitespace-pre-wrap">{discordEmbed.description}</div>}
+                    {discordEmbed.footer && <div className="mt-2 text-[11px] text-[#949ba4]">{discordEmbed.footer.text}</div>}
+                  </div>
+                ) : (
+                  <div className="text-sm whitespace-pre-wrap">{shownBody}</div>
+                )}
               </div>
             </div>
           </div>

@@ -11,6 +11,7 @@ import (
 
 	"github.com/gaucho-racing/notify/notify/database"
 	"github.com/gaucho-racing/notify/notify/model"
+	"github.com/gaucho-racing/notify/notify/pkg/discord"
 	"github.com/gaucho-racing/notify/notify/pkg/sentinel"
 	ulid "github.com/gaucho-racing/ulid-go"
 	"gorm.io/gorm"
@@ -34,9 +35,8 @@ type SendRequest struct {
 	SMSSenderID   string
 	Subject       string
 	Body          string
-	HTML          string
-	ActionURL     string
-	ActionLabel   string
+	EmailHTML     string
+	DiscordEmbeds []discord.Embed
 	Category      string
 	Metadata      map[string]any
 }
@@ -87,9 +87,8 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		SenderType:     actor.Type,
 		Subject:        req.Subject,
 		Body:           req.Body,
-		HTML:           req.HTML,
-		ActionURL:      req.ActionURL,
-		ActionLabel:    req.ActionLabel,
+		EmailHTML:      req.EmailHTML,
+		DiscordEmbeds:  req.DiscordEmbeds,
 		Category:       req.Category,
 		Metadata:       req.Metadata,
 		Channels:       req.Channels,

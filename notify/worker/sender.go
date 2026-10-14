@@ -10,10 +10,9 @@ import (
 
 // Outbound is everything a channel needs to render and send one delivery.
 type Outbound struct {
-	DeliveryID      string
-	Message         model.Message
-	Contact         sentinel.Contact
-	ApplicationName string
+	DeliveryID string
+	Message    model.Message
+	Contact    sentinel.Contact
 }
 
 type Sender interface {

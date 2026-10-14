@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"time"
+
+	"github.com/gaucho-racing/notify/notify/pkg/discord"
+)
 
 type MessageRecipients struct {
 	EntityIDs []string `json:"entity_ids"`
@@ -12,18 +16,19 @@ type MessageRecipients struct {
 // Recipients preserves what was asked for while RecipientCount records who it
 // resolved to.
 type Message struct {
-	ID             string         `json:"id" gorm:"primaryKey"`
-	ClientID       string         `json:"client_id" gorm:"index"`
-	SenderEntityID string         `json:"sender_entity_id" gorm:"index"`
-	SenderType     ActorType      `json:"sender_type"`
-	Subject        string         `json:"subject"`
-	Body           string         `json:"body"`
-	HTML           string         `json:"html,omitempty"`
-	ActionURL      string         `json:"action_url,omitempty"`
-	ActionLabel    string         `json:"action_label,omitempty"`
-	Category       string         `json:"category,omitempty" gorm:"index"`
-	Metadata       map[string]any `json:"metadata" gorm:"serializer:json;type:jsonb"`
-	Channels       []Channel      `json:"channels" gorm:"serializer:json;type:jsonb"`
+	ID             string    `json:"id" gorm:"primaryKey"`
+	ClientID       string    `json:"client_id" gorm:"index"`
+	SenderEntityID string    `json:"sender_entity_id" gorm:"index"`
+	SenderType     ActorType `json:"sender_type"`
+	Subject        string    `json:"subject"`
+	Body           string    `json:"body"`
+	// EmailHTML and DiscordEmbeds are the caller's rich versions; when unset
+	// those channels send Body as plain text, as SMS always does.
+	EmailHTML     string          `json:"email_html,omitempty" gorm:"column:html"`
+	DiscordEmbeds []discord.Embed `json:"discord_embeds,omitempty" gorm:"serializer:json;type:jsonb"`
+	Category      string          `json:"category,omitempty" gorm:"index"`
+	Metadata      map[string]any  `json:"metadata" gorm:"serializer:json;type:jsonb"`
+	Channels      []Channel       `json:"channels" gorm:"serializer:json;type:jsonb"`
 	// DiscordBotID, EmailSenderID, and SMSSenderID are resolved at send time,
 	// falling back to the defaults, so retries go out the same way even if a
 	// default changes.

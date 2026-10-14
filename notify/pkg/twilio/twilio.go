@@ -117,31 +117,8 @@ func NormalizePhoneNumber(value string) (string, bool) {
 	return normalized, e164.MatchString(normalized)
 }
 
-// TruncateBody fits text within MaxBodyLength, reserving room for suffix so
-// a trailing link is never cut off.
-func TruncateBody(text string, suffix string) string {
-	if utf16Length(text)+utf16Length(suffix) <= MaxBodyLength {
-		return text + suffix
-	}
-	const ellipsis = "…"
-	budget := MaxBodyLength - utf16Length(suffix) - utf16Length(ellipsis)
-	used := 0
-	var b strings.Builder
-	for _, r := range text {
-		size := utf16.RuneLen(r)
-		if size < 0 {
-			size = 1
-		}
-		if used+size > budget {
-			break
-		}
-		used += size
-		b.WriteRune(r)
-	}
-	return strings.TrimSpace(b.String()) + ellipsis + suffix
-}
-
-func utf16Length(text string) int {
+// BodyLength counts text the way Twilio measures MaxBodyLength.
+func BodyLength(text string) int {
 	return len(utf16.Encode([]rune(text)))
 }
 
