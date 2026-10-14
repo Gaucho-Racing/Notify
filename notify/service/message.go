@@ -34,8 +34,11 @@ type SendRequest struct {
 	Body          string
 	EmailHTML     string
 	DiscordEmbeds []discord.Embed
-	Category      string
-	Metadata      map[string]any
+	// DiscordWebhook only applies to DiscordChannelIDs; DMs always come from
+	// the bot.
+	DiscordWebhook *discord.WebhookIdentity
+	Category       string
+	Metadata       map[string]any
 }
 
 // SendMessage records a message and one PENDING delivery per person, plus one
@@ -65,6 +68,7 @@ func SendMessage(ctx context.Context, req SendRequest, actor Actor, dailyLimit i
 		Body:           req.Body,
 		EmailHTML:      req.EmailHTML,
 		DiscordEmbeds:  req.DiscordEmbeds,
+		DiscordWebhook: req.DiscordWebhook,
 		Category:       req.Category,
 		Metadata:       req.Metadata,
 		Recipients:     req.Recipients,

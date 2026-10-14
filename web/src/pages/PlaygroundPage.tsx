@@ -66,6 +66,9 @@ export default function PlaygroundPage() {
   const [emailFormat, setEmailFormat] = useState<"plain" | "html">("plain")
   const [emailHTML, setEmailHTML] = useState("")
   const [discordFormat, setDiscordFormat] = useState<"plain" | "rich">("plain")
+  const [discordIdentity, setDiscordIdentity] = useState<"bot" | "custom">("bot")
+  const [webhookName, setWebhookName] = useState("")
+  const [webhookAvatar, setWebhookAvatar] = useState("")
   const [embed, setEmbed] = useState<EmbedDraft>({ title: "", description: "", url: "", color: DEFAULT_EMBED_COLOR, footer: "" })
   const [messageID, setMessageID] = useState<string | null>(null)
 
@@ -106,13 +109,18 @@ export default function PlaygroundPage() {
     enabled: isAdmin && channel === "DISCORD" && !!selectedBotID,
     staleTime: 60 * 1000,
   })
-  const channelNames = useMemo(() => {
+  const { channelNames, noWebhookChannels } = useMemo(() => {
     const names = new Map<string, string>()
+    const noWebhook = new Set<string>()
     for (const guild of botChannels.data ?? []) {
-      for (const guildChannel of guild.channels) names.set(guildChannel.id, guildChannel.name)
+      for (const guildChannel of guild.channels) {
+        names.set(guildChannel.id, guildChannel.name)
+        if (!guildChannel.can_webhook) noWebhook.add(guildChannel.id)
+      }
     }
-    return names
+    return { channelNames: names, noWebhookChannels: noWebhook }
   }, [botChannels.data])
+  const customIdentity = channel === "DISCORD" && discordIdentity === "custom"
   const richEmbed = useMemo(() => embedFromDraft(embed), [embed])
 
   const payload = useMemo<SendMessageInput>(() => {
@@ -137,10 +145,30 @@ export default function PlaygroundPage() {
         bot_id: senderID,
         content: body.trim() || undefined,
         embeds: discordFormat === "rich" && richEmbed ? [richEmbed] : undefined,
+        webhook:
+          discordIdentity === "custom"
+            ? { username: webhookName.trim(), avatar_url: webhookAvatar.trim() || undefined }
+            : undefined,
       }
     }
     return input
-  }, [channel, senders, entityIDs, groupIDs, discordChannelIDs, subject, body, category, emailFormat, emailHTML, discordFormat, richEmbed])
+  }, [
+    channel,
+    senders,
+    entityIDs,
+    groupIDs,
+    discordChannelIDs,
+    subject,
+    body,
+    category,
+    emailFormat,
+    emailHTML,
+    discordFormat,
+    richEmbed,
+    discordIdentity,
+    webhookName,
+    webhookAvatar,
+  ])
 
   const send = useMutation({
     mutationFn: () => sendMessage(payload),
@@ -175,6 +203,10 @@ export default function PlaygroundPage() {
     channel === "DISCORD" && discordLength > DISCORD_MAX_CONTENT && `Message is over Discord's ${DISCORD_MAX_CONTENT}-character limit.`,
     channel === "DISCORD" && discordFormat === "plain" && trimmedBody === "" && "Write a message.",
     channel === "DISCORD" && discordFormat === "rich" && !richEmbed && "Give the embed a title or description.",
+    customIdentity && webhookName.trim() === "" && "Give the custom identity a name.",
+    customIdentity && /discord|clyde/i.test(webhookName) && 'Custom names can\'t contain "discord" or "clyde".',
+    customIdentity && (entityIDs.length > 0 || groupIDs.length > 0) && "Custom identities only post in channels; remove the DM recipients.",
+    customIdentity && discordChannelIDs.some((id) => noWebhookChannels.has(id)) && "The bot can't use a custom identity in a selected channel (needs Manage Webhooks).",
   ].filter((problem): problem is string => typeof problem === "string")
   const canSend = problems.length === 0 && !send.isPending
 
@@ -223,12 +255,46 @@ export default function PlaygroundPage() {
                 onChange={(value) => (channel === "DISCORD" ? changeBot(value) : setSenders((current) => ({ ...current, [channel]: value })))}
               />
             </div>
+            {channel === "DISCORD" && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs text-muted-foreground">Send as</Label>
+                  <Segmented
+                    value={discordIdentity}
+                    options={[["bot", "Bot"], ["custom", "Custom"]]}
+                    onChange={(value) => setDiscordIdentity(value as "bot" | "custom")}
+                  />
+                </div>
+                {discordIdentity === "custom" && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="pg-webhook-name" className="text-xs text-muted-foreground">Name</Label>
+                      <Input id="pg-webhook-name" value={webhookName} onChange={(event) => setWebhookName(event.target.value)} maxLength={80} placeholder="Team Leads" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="pg-webhook-avatar" className="text-xs text-muted-foreground">Avatar URL</Label>
+                      <Input
+                        id="pg-webhook-avatar"
+                        type="url"
+                        value={webhookAvatar}
+                        onChange={(event) => setWebhookAvatar(event.target.value)}
+                        placeholder="https://gauchoracing.com/logo/gr-logo-blank.png"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground sm:col-span-2">
+                      Posts through a temporary webhook that's deleted right after. Channel posts only; DMs always come from the bot.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </Panel>
 
           <Panel label="02 · Recipients">
             <div className="space-y-5">
               {channel === "DISCORD" && (
                 <DiscordChannelPicker
+                  needsWebhook={discordIdentity === "custom"}
                   guilds={botChannels.data ?? []}
                   loading={botChannels.isLoading}
                   error={botChannels.error}
@@ -364,8 +430,8 @@ export default function PlaygroundPage() {
               emailHTML={emailFormat === "html" ? emailHTML : ""}
               discordEmbed={discordFormat === "rich" ? richEmbed : null}
               discordChannel={discordChannelIDs.length ? channelNames.get(discordChannelIDs[0]) : undefined}
-              botName={selectedBot?.name ?? "Notify"}
-              botAvatar={selectedBot?.avatar_url}
+              botName={customIdentity && webhookName.trim() ? webhookName.trim() : (selectedBot?.name ?? "Notify")}
+              botAvatar={customIdentity ? webhookAvatar.trim() || undefined : selectedBot?.avatar_url}
             />
           )}
           <RequestPanel payload={payload} />
@@ -665,6 +731,7 @@ function RecipientPicker({
 }
 
 function DiscordChannelPicker({
+  needsWebhook,
   guilds,
   loading,
   error,
@@ -672,6 +739,7 @@ function DiscordChannelPicker({
   selected,
   onChange,
 }: {
+  needsWebhook: boolean
   guilds: DiscordGuild[]
   loading: boolean
   error: unknown
@@ -749,6 +817,9 @@ function DiscordChannelPicker({
                         >
                           {guildChannel.announcement ? <Megaphone className="size-3.5" /> : <Hash className="size-3.5" />}
                           <span className="min-w-0 flex-1 truncate">{guildChannel.name}</span>
+                          {needsWebhook && !guildChannel.can_webhook && (
+                            <span className="shrink-0 font-mono text-[10px] text-status-pending">no webhooks</span>
+                          )}
                           <span className={cn("size-3 shrink-0 rounded-[2px] border", active ? "border-primary bg-primary" : "border-muted-foreground/40")} />
                         </button>
                       </div>

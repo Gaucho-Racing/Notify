@@ -35,6 +35,9 @@ func (discordSender) Send(ctx context.Context, outbound Outbound, destination st
 		Embeds:          outbound.Message.DiscordEmbeds,
 		AllowedMentions: discord.NoMassMentions,
 	}
+	if outbound.ToChannel && outbound.Message.DiscordWebhook != nil {
+		return discord.SendAsWebhook(ctx, token, destination, *outbound.Message.DiscordWebhook, message)
+	}
 	if outbound.ToChannel {
 		return discord.SendChannelMessage(ctx, token, destination, message)
 	}

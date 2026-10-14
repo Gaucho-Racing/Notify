@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const baseURL = "https://discord.com/api/v10"
+var baseURL = "https://discord.com/api/v10"
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
@@ -158,6 +158,12 @@ func call(ctx context.Context, token string, method string, path string, payload
 	if strings.TrimSpace(token) == "" {
 		return fmt.Errorf("discord bot token is empty")
 	}
+	return request(ctx, "Bot "+token, method, path, payload, out)
+}
+
+// request sends authorization as given; webhook execution passes none
+// because the webhook token in the path is the credential.
+func request(ctx context.Context, authorization string, method string, path string, payload interface{}, out interface{}) error {
 	var body io.Reader
 	if payload != nil {
 		encoded, err := json.Marshal(payload)
@@ -171,7 +177,9 @@ func call(ctx context.Context, token string, method string, path string, payload
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bot "+token)
+	if authorization != "" {
+		req.Header.Set("Authorization", authorization)
+	}
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -192,6 +200,9 @@ func call(ctx context.Context, token string, method string, path string, payload
 			discordErr.Message = strings.TrimSpace(string(respBody))
 		}
 		return discordErr
+	}
+	if out == nil || len(respBody) == 0 {
+		return nil
 	}
 	return json.Unmarshal(respBody, out)
 }

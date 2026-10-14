@@ -29,9 +29,12 @@ type Message struct {
 	// content. EmailHTML and DiscordEmbeds are the rich versions.
 	EmailHTML     string          `json:"email_html,omitempty" gorm:"column:html"`
 	DiscordEmbeds []discord.Embed `json:"discord_embeds,omitempty" gorm:"serializer:json;type:jsonb"`
-	Category      string          `json:"category,omitempty" gorm:"index"`
-	Metadata      map[string]any  `json:"metadata" gorm:"serializer:json;type:jsonb"`
-	Channel       Channel         `json:"channel" gorm:"index"`
+	// DiscordWebhook posts channel messages under a custom name and avatar
+	// instead of the bot's own.
+	DiscordWebhook *discord.WebhookIdentity `json:"discord_webhook,omitempty" gorm:"serializer:json;type:jsonb"`
+	Category       string                   `json:"category,omitempty" gorm:"index"`
+	Metadata       map[string]any           `json:"metadata" gorm:"serializer:json;type:jsonb"`
+	Channel        Channel                  `json:"channel" gorm:"index"`
 	// Only the sender for Channel is set. It is resolved at send time,
 	// falling back to the default, so retries go out the same way even if the
 	// default changes.

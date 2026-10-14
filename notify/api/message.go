@@ -54,9 +54,10 @@ type smsContent struct {
 }
 
 type discordContent struct {
-	BotID   string          `json:"bot_id"`
-	Content string          `json:"content"`
-	Embeds  []discord.Embed `json:"embeds"`
+	BotID   string                   `json:"bot_id"`
+	Content string                   `json:"content"`
+	Embeds  []discord.Embed          `json:"embeds"`
+	Webhook *discord.WebhookIdentity `json:"webhook"`
 }
 
 type messageDetail struct {
@@ -328,6 +329,9 @@ func validateSendRequest(req sendMessageRequest) (service.SendRequest, error) {
 		err = applySMSContent(&sendReq, *req.SMS)
 	case model.ChannelDiscord:
 		err = applyDiscordContent(&sendReq, *req.Discord)
+		if err == nil && sendReq.DiscordWebhook != nil && (len(recipients.EntityIDs) > 0 || len(recipients.GroupIDs) > 0) {
+			err = errors.New("discord.webhook only applies to discord_channel_ids; send DMs in a separate message from the bot")
+		}
 	}
 	return sendReq, err
 }
@@ -377,6 +381,16 @@ func applyDiscordContent(sendReq *service.SendRequest, content discordContent) e
 	}
 	if err := discord.ValidateEmbeds(content.Embeds); err != nil {
 		return fmt.Errorf("discord.%w", err)
+	}
+	if content.Webhook != nil {
+		identity := discord.WebhookIdentity{
+			Username:  strings.TrimSpace(content.Webhook.Username),
+			AvatarURL: strings.TrimSpace(content.Webhook.AvatarURL),
+		}
+		if err := discord.ValidateWebhookIdentity(identity); err != nil {
+			return fmt.Errorf("discord.%w", err)
+		}
+		sendReq.DiscordWebhook = &identity
 	}
 	sendReq.SenderID = strings.TrimSpace(content.BotID)
 	sendReq.Body = text

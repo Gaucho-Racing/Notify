@@ -13,6 +13,7 @@ const (
 	permissionAdministrator = 1 << 3
 	permissionViewChannel   = 1 << 10
 	permissionSendMessages  = 1 << 11
+	permissionManageWebhook = 1 << 29
 	permissionAll           = ^uint64(0)
 
 	channelTypeText         = 0
@@ -37,6 +38,9 @@ type GuildChannel struct {
 	// Announcement channels post like text channels but are followable from
 	// other servers.
 	Announcement bool `json:"announcement,omitempty"`
+	// CanWebhook means the bot has Manage Webhooks here, which posting under
+	// a custom name and avatar requires.
+	CanWebhook bool `json:"can_webhook"`
 }
 
 type partialGuild struct {
@@ -111,6 +115,7 @@ func postableChannels(guild partialGuild, roles []string, botUserID string, chan
 		return 0, channel.Position
 	}
 	eligible := []channelObject{}
+	canWebhook := map[string]bool{}
 	for _, channel := range channels {
 		if channel.Type != channelTypeText && channel.Type != channelTypeAnnouncement {
 			continue
@@ -119,6 +124,7 @@ func postableChannels(guild partialGuild, roles []string, botUserID string, chan
 		if permissions&permissionViewChannel == 0 || permissions&permissionSendMessages == 0 {
 			continue
 		}
+		canWebhook[channel.ID] = permissions&permissionManageWebhook != 0
 		eligible = append(eligible, channel)
 	}
 	sort.SliceStable(eligible, func(i, j int) bool {
@@ -136,6 +142,7 @@ func postableChannels(guild partialGuild, roles []string, botUserID string, chan
 			Name:         channel.Name,
 			Category:     categories[channel.ParentID].Name,
 			Announcement: channel.Type == channelTypeAnnouncement,
+			CanWebhook:   canWebhook[channel.ID],
 		})
 	}
 	return result

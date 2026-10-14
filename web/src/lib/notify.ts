@@ -87,6 +87,7 @@ export type DiscordGuildChannel = {
   name: string
   category?: string
   announcement?: boolean
+  can_webhook: boolean
 }
 
 export type DiscordGuild = {
@@ -363,7 +364,12 @@ export type SendMessageInput = {
   category?: string
   email?: { sender_id?: string; subject: string; body: string; html?: string }
   sms?: { sender_id?: string; body: string }
-  discord?: { bot_id?: string; content?: string; embeds?: DiscordEmbed[] }
+  discord?: {
+    bot_id?: string
+    content?: string
+    embeds?: DiscordEmbed[]
+    webhook?: { username: string; avatar_url?: string }
+  }
 }
 
 export type Message = {
