@@ -109,6 +109,7 @@ jobs:
           cat "$RUNNER_TEMP/pr-body.md"
 
       - name: Create pull request
+        id: pr
         if: steps.versions.outputs.skip == 'false'
         working-directory: infra
         env:
@@ -128,6 +129,7 @@ jobs:
           if [ -n "$PR" ]; then
             echo "PR #$PR already open for $BRANCH; pushed the updated branch."
           else
+            echo "created=true" >> "$GITHUB_OUTPUT"
             gh pr create \
               --repo "$INFRA_REPO" \
               --base main \
@@ -136,7 +138,31 @@ jobs:
               --body-file "$RUNNER_TEMP/pr-body.md"
             PR="$(gh pr list --repo "$INFRA_REPO" --head "$BRANCH" --state open --json number -q '.[0].number')"
           fi
+          [ -n "$PR" ] && echo "url=https://github.com/$INFRA_REPO/pull/$PR" >> "$GITHUB_OUTPUT"
           if [ -n "$PR" ] && [ -n "$RELEASE_AUTHOR" ]; then
             gh pr edit "$PR" --repo "$INFRA_REPO" --add-reviewer "$RELEASE_AUTHOR" \
               || echo "Could not request review from @$RELEASE_AUTHOR."
           fi
+
+      - name: Pull announcement secrets
+        id: announce-secrets
+        if: steps.pr.outputs.created == 'true'
+        continue-on-error: true
+        uses: Gaucho-Racing/vault-pull-secrets@v1
+        with:
+          secrets: |
+            notify.announce_token
+            notify.announce_channel_id
+
+      - name: Announce deploy
+        if: steps.pr.outputs.created == 'true' && steps.announce-secrets.outcome == 'success'
+        continue-on-error: true
+        uses: ./.github/actions/announce-deploy
+        with:
+          token: ${{ fromJSON(steps.announce-secrets.outputs.secrets_json).ANNOUNCE_TOKEN }}
+          channel-id: ${{ fromJSON(steps.announce-secrets.outputs.secrets_json).ANNOUNCE_CHANNEL_ID }}
+          service: Notify
+          version: ${{ steps.versions.outputs.new_tag }}
+          pr-url: ${{ steps.pr.outputs.url }}
+          github-user-id: ${{ github.event.release.author.id }}
+          github-login: ${{ github.event.release.author.login }}
