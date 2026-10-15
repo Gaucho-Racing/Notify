@@ -3,7 +3,7 @@ package config
 import "os"
 
 const Name = "notify"
-const Version = "0.1.0"
+const Version = "1.0.0"
 
 var Env = os.Getenv("ENV")
 var Port = os.Getenv("PORT")
