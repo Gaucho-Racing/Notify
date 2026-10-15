@@ -50,6 +50,34 @@ export async function listSentinelApplications() {
   return response.data
 }
 
+export type AppPolicy = {
+  id: string
+  client_id: string
+  description: string
+  allowed_channels: Channel[]
+  can_target_groups: boolean
+  daily_limit: number
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export type AppPolicyInput = Pick<AppPolicy, "description" | "allowed_channels" | "can_target_groups" | "daily_limit" | "enabled">
+
+export async function listAppPolicies() {
+  const response = await api.get<AppPolicy[]>("/policies")
+  return response.data
+}
+
+export async function upsertAppPolicy(clientID: string, input: AppPolicyInput) {
+  const response = await api.put<AppPolicy>(`/policies/${encodeURIComponent(clientID)}`, input)
+  return response.data
+}
+
+export async function deleteAppPolicy(clientID: string) {
+  await api.delete(`/policies/${encodeURIComponent(clientID)}`)
+}
+
 export async function getStats(days: number) {
   const response = await api.get<Stats>("/stats", { params: { days } })
   return response.data

@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate } from "react-router-dom"
 
 import { AppShell } from "@/components/AppShell"
 import { RequireAuth } from "@/components/RequireAuth"
+import ApplicationsPage from "@/pages/ApplicationsPage"
 import DashboardPage from "@/pages/DashboardPage"
 import DiscordBotsPage from "@/pages/DiscordBotsPage"
 import EmailSendersPage from "@/pages/EmailSendersPage"
@@ -28,6 +29,7 @@ export const router = createBrowserRouter([
           { path: "/sms-senders", element: <SMSSendersPage /> },
           { path: "/twilio-accounts", element: <TwilioAccountsPage /> },
           { path: "/discord-bots", element: <DiscordBotsPage /> },
+          { path: "/applications", element: <ApplicationsPage /> },
           { path: "/settings", element: <SettingsPage /> },
         ],
       },

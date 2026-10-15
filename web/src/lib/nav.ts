@@ -1,4 +1,4 @@
-import { Bot, KeyRound, LayoutDashboard, Mail, MessageSquare, Phone, Send, Settings, type LucideIcon } from "lucide-react"
+import { AppWindow, Bot, KeyRound, LayoutDashboard, Mail, MessageSquare, Phone, Send, Settings, type LucideIcon } from "lucide-react"
 
 import type { Channel } from "@/lib/notify"
 
@@ -44,7 +44,13 @@ export const NAV_GROUPS: NavGroup[] = [
     channel: "DISCORD",
     items: [{ to: "/discord-bots", label: "Bots", icon: Bot, adminOnly: true }],
   },
-  { label: "System", items: [{ to: "/settings", label: "Settings", icon: Settings }] },
+  {
+    label: "System",
+    items: [
+      { to: "/applications", label: "Applications", icon: AppWindow, adminOnly: true },
+      { to: "/settings", label: "Settings", icon: Settings },
+    ],
+  },
 ]
 
 export function visibleNavGroups(isAdmin: boolean) {
