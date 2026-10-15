@@ -4,6 +4,7 @@
 
 [![build](https://github.com/Gaucho-Racing/Notify/actions/workflows/build.yml/badge.svg)](https://github.com/Gaucho-Racing/Notify/actions/workflows/build.yml)
 [![Release](https://img.shields.io/github/release/gaucho-racing/notify.svg?style=flat-square)](https://github.com/gaucho-racing/notify/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Notify is Gaucho Racing's notification service.
 It gives every team application one API for reaching members by email, SMS, or Discord, so apps don't each need their own Resend keys, Twilio numbers, or bot tokens.
@@ -137,3 +138,7 @@ If you have a suggestion that would make this better, please fork the repo and c
 3. Commit your Changes (`git commit -m 'Add my amazing feature'`)
 4. Push to the Branch (`git push origin gh-username/my-amazing-feature`)
 5. Open a Pull Request
+
+## License
+
+Distributed under the MIT License. See `LICENSE.txt` for more information.
