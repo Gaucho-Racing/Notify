@@ -60,6 +60,8 @@ type Message struct {
 	From                string
 	MessagingServiceSID string
 	Body                string
+	// StatusCallback receives Twilio's delivery receipts for this message.
+	StatusCallback string
 }
 
 type PhoneNumber struct {
@@ -132,6 +134,9 @@ func Send(ctx context.Context, creds Credentials, message Message) (string, erro
 		form.Set("MessagingServiceSid", message.MessagingServiceSID)
 	} else {
 		form.Set("From", message.From)
+	}
+	if message.StatusCallback != "" {
+		form.Set("StatusCallback", message.StatusCallback)
 	}
 	var created struct {
 		SID string `json:"sid"`

@@ -39,6 +39,7 @@ func (smsSender) Send(ctx context.Context, outbound Outbound, destination string
 		From:                sender.FromNumber,
 		MessagingServiceSID: sender.MessagingServiceSID,
 		Body:                outbound.Message.Body,
+		StatusCallback:      service.TwilioStatusCallbackURL(outbound.DeliveryID),
 	})
 }
 

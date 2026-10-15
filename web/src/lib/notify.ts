@@ -374,6 +374,7 @@ export type Delivery = {
   status: DeliveryStatus
   attempts: number
   last_error?: string
+  provider_status?: string
   sent_at?: string
   created_at: string
 }

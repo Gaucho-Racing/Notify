@@ -22,6 +22,11 @@ var SentinelSAToken = os.Getenv("SENTINEL_SA_TOKEN")
 
 var EncryptionKey = os.Getenv("ENCRYPTION_KEY")
 
+// PublicAPIURL is where providers reach Notify's API from the internet, e.g.
+// https://notify.gauchoracing.com/api. Without it, SMS delivery receipts are
+// not requested.
+var PublicAPIURL = os.Getenv("PUBLIC_API_URL")
+
 var WorkerConcurrency = os.Getenv("WORKER_CONCURRENCY")
 var DeliveryMaxAttempts = os.Getenv("DELIVERY_MAX_ATTEMPTS")
 

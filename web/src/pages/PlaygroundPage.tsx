@@ -25,6 +25,7 @@ import {
   listUsers,
   sendMessage,
   type Channel,
+  type Delivery,
   type DeliveryStatus,
   type DiscordEmbed,
   type DiscordGuild,
@@ -923,7 +924,9 @@ function TransmissionLog({ messageID, channelNames, onClear }: { messageID: stri
     queryFn: () => getMessage(messageID),
     refetchInterval: (query) => {
       const deliveries = query.state.data?.deliveries ?? []
-      const settled = deliveries.length > 0 && deliveries.every((delivery) => delivery.status !== "PENDING" && delivery.status !== "SENDING")
+      const settled =
+        deliveries.length > 0 &&
+        deliveries.every((delivery) => delivery.status !== "PENDING" && delivery.status !== "SENDING" && !awaitingReceipt(delivery))
       return settled ? false : POLL_INTERVAL_MS
     },
   })
@@ -977,6 +980,7 @@ function TransmissionLog({ messageID, channelNames, onClear }: { messageID: stri
             {(delivery.destination || delivery.last_error) && (
               <div className="pl-8 font-mono text-[11px] break-words text-muted-foreground">
                 {delivery.destination}
+                {delivery.provider_status && <span> · {delivery.provider_status}</span>}
                 {delivery.last_error && (
                   <span className={cn("block", delivery.status === "FAILED" ? "text-status-failed" : "text-muted-foreground")}>
                     {delivery.last_error}
@@ -990,6 +994,15 @@ function TransmissionLog({ messageID, channelNames, onClear }: { messageID: stri
       </div>
     </Panel>
   )
+}
+
+const FINAL_PROVIDER_STATUSES = ["delivered", "undelivered", "failed", "read", "canceled"]
+const RECEIPT_WAIT_MS = 2 * 60 * 1000
+
+function awaitingReceipt(delivery: Delivery) {
+  if (delivery.channel !== "SMS" || delivery.status !== "SENT" || !delivery.sent_at) return false
+  if (FINAL_PROVIDER_STATUSES.includes(delivery.provider_status ?? "")) return false
+  return Date.now() - new Date(delivery.sent_at).getTime() < RECEIPT_WAIT_MS
 }
 
 function RequestPanel({ payload }: { payload: SendMessageInput }) {

@@ -42,9 +42,12 @@ type Delivery struct {
 	LockedAt          *time.Time     `json:"-"`
 	LastError         string         `json:"last_error,omitempty"`
 	ProviderMessageID string         `json:"provider_message_id,omitempty"`
-	SentAt            *time.Time     `json:"sent_at,omitempty"`
-	CreatedAt         time.Time      `json:"created_at" gorm:"autoCreateTime;index"`
-	UpdatedAt         time.Time      `json:"updated_at" gorm:"autoUpdateTime"`
+	// ProviderStatus is the provider's own view of the message after it was
+	// accepted, e.g. Twilio's delivered or undelivered.
+	ProviderStatus string     `json:"provider_status,omitempty"`
+	SentAt         *time.Time `json:"sent_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at" gorm:"autoCreateTime;index"`
+	UpdatedAt      time.Time  `json:"updated_at" gorm:"autoUpdateTime"`
 }
 
 func (Delivery) TableName() string {

@@ -61,6 +61,9 @@ func Verify() {
 		}
 		Secrets = box
 	}
+	if PublicAPIURL == "" {
+		logger.SugarLogger.Warnf("PUBLIC_API_URL is not set, SMS deliveries will not track whether carriers delivered them")
+	}
 	WorkerConcurrencyLimit = positiveInt("WORKER_CONCURRENCY", &WorkerConcurrency, "8")
 	DeliveryMaxAttemptsLimit = positiveInt("DELIVERY_MAX_ATTEMPTS", &DeliveryMaxAttempts, "6")
 }

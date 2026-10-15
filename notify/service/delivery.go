@@ -71,10 +71,12 @@ func RetryDelivery(id string) (model.Delivery, error) {
 	result := database.DB.Model(&model.Delivery{}).
 		Where("id = ? AND status = ?", id, model.DeliveryStatusFailed).
 		Updates(map[string]interface{}{
-			"status":          model.DeliveryStatusPending,
-			"attempts":        0,
-			"next_attempt_at": time.Now(),
-			"last_error":      "",
+			"status":              model.DeliveryStatusPending,
+			"attempts":            0,
+			"next_attempt_at":     time.Now(),
+			"last_error":          "",
+			"provider_message_id": "",
+			"provider_status":     "",
 		})
 	if result.Error != nil {
 		return model.Delivery{}, result.Error

@@ -117,6 +117,8 @@ func InitializeRoutes(router *gin.Engine) {
 	router.GET("/deliveries", ListDeliveries)
 	router.POST("/deliveries/:deliveryID/retry", RetryDelivery)
 
+	router.POST("/webhooks/twilio/status/:deliveryID", TwilioStatusCallback)
+
 	router.GET("/stats", GetStats)
 	router.GET("/stats/activity", GetActivityStats)
 }
